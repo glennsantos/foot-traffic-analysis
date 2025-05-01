@@ -80,6 +80,9 @@
             font-weight: bold;
             margin-left: 10px;
         }
+        .meets-criteria.fail {
+            color: #dc3545;
+        }
         .criteria-note {
             color: #6c757d;
             font-size: 0.8em;
@@ -234,12 +237,11 @@
             'schools_universities': 'Educational institutions including schools, universities, and colleges',
             'hospitals_clinics': 'Healthcare facilities including hospitals and clinics',
             'markets': 'Public markets and marketplaces',
-            'places_of_worship': 'Religious establishments and places of worship',
-            'tourist_sites': 'Tourist attractions and points of interest',
-            'leisure_places': 'Recreation and leisure facilities',
+            'places_of_worship': 'Religious establishments including churches, mosques, and chapels',
+            'tourist_sites': 'Tourist attractions and points of interest including parks and leisure facilities',
             'shops': 'Retail establishments and shopping venues',
-            'bus_stops': 'Public transportation stops for buses',
-            'pedestrian_crossings': 'Designated pedestrian crossing points',
+            'bus_stops': 'Public transportation stops for buses and jeepneys',
+            'pedestrian_crossings': 'Designated pedestrian crossing points and sidewalks',
             'intersection_count': 'Number of road intersections in the area'
         };
 
@@ -247,12 +249,13 @@
             'restaurants_and_cafes': { threshold: 4, description: 'Should have ≥ 4 restaurants/cafes' },
             'shops': { threshold: 8, description: 'Should have ≥ 8 shops/retail POIs' },
             'intersection_count': { threshold: 20, description: 'Should have ≥ 20 intersections' },
-            'schools_universities': { threshold: 1, description: 'Should have ≥ 1 school or university' },
-            'hospitals_clinics': { threshold: 1, description: 'Should have ≥ 1 clinic or hospital' },
-            'bus_stops': { threshold: 2, description: 'Should have ≥ 2 bus/jeepney stops' },
+            'schools_universities': { threshold: 1, description: 'Should have ≥ 1 school or be near a campus' },
+            'hospitals_clinics': { threshold: 1, description: 'Should have ≥ 1 clinic or medical facility' },
+            'bus_stops': { threshold: 2, description: 'Should have ≥ 2 transit stops' },
             'pedestrian_crossings': { threshold: 3, description: 'Should have ≥ 3 pedestrian features' },
-            'markets': { threshold: 1, description: 'Should have ≥ 1 market' },
-            'tourist_sites': { threshold: 1, description: 'Should have ≥ 1 tourist/leisure POI' }
+            'markets': { threshold: 1, description: 'Should have ≥ 1 market or mall' },
+            'tourist_sites': { threshold: 1, description: 'Should have ≥ 1 tourist/leisure POI' },
+            'places_of_worship': { threshold: 1, description: 'Should have ≥ 1 large church/mosque OR ≥ 2 small chapels' }
         };
 
         function formatIndicatorName(name) {
@@ -267,7 +270,13 @@
             
             let count;
             if (typeof value === 'object' && value.count !== undefined) {
-                count = value.count;
+                // Filter out 'nan (nan)' entries when counting
+                if (value.places) {
+                    const validPlaces = value.places.filter(place => place !== 'nan (nan)');
+                    count = validPlaces.length;
+                } else {
+                    count = value.count;
+                }
             } else {
                 count = value;
             }
@@ -412,7 +421,7 @@
                             const meetsCriteria = checkCriteria(key, value);
                             if (meetsCriteria !== null) {
                                 const checkmark = document.createElement('span');
-                                checkmark.className = 'meets-criteria';
+                                checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
                                 checkmark.textContent = meetsCriteria ? '✓' : '✗';
                                 checkmark.title = criteria[key].description;
                                 countCell.appendChild(checkmark);
@@ -450,7 +459,7 @@
                             const meetsCriteria = checkCriteria(key, value);
                             if (meetsCriteria !== null) {
                                 const checkmark = document.createElement('span');
-                                checkmark.className = 'meets-criteria';
+                                checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
                                 checkmark.textContent = meetsCriteria ? '✓' : '✗';
                                 checkmark.title = criteria[key].description;
                                 countCell.appendChild(checkmark);

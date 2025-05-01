@@ -58,7 +58,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300):
                 places = []
                 for _, row in filtered_df.iterrows():
                     place_detail = get_place_details(row)
-                    if place_detail:
+                    if place_detail and place_detail != 'nan (nan)':  # Exclude 'nan (nan)' entries
                         places.append(place_detail)
                 
                 return {
@@ -75,8 +75,15 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300):
         healthcare = collect_places(pois, "amenity", ["hospital", "clinic"])
         markets = collect_places(pois, "amenity", ["marketplace"])
         worship = collect_places(pois, "amenity", ["place_of_worship"])
-        tourist = collect_places(pois, "tourism")
-        leisure = collect_places(pois, "leisure")
+
+        # Combine tourist sites and leisure places
+        tourist_places = collect_places(pois, "tourism")
+        leisure_places = collect_places(pois, "leisure")
+        combined_tourist_leisure = {
+            'count': tourist_places['count'] + leisure_places['count'],
+            'places': tourist_places['places'] + leisure_places['places']
+        }
+
         shops = collect_places(pois, "shop")
         bus_stops = collect_places(pois, "highway", ["bus_stop"])
         crossings = collect_places(pois, "highway", ["crossing"])
@@ -95,8 +102,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300):
             "hospitals_clinics": healthcare,
             "markets": markets,
             "places_of_worship": worship,
-            "tourist_sites": tourist,
-            "leisure_places": leisure,
+            "tourist_sites": combined_tourist_leisure,  # Combined tourist and leisure places
             "shops": shops,
             "bus_stops": bus_stops,
             "pedestrian_crossings": crossings,
