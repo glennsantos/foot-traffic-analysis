@@ -13,4 +13,8 @@ foot_traffic_results.json
 .idea/
 .vscode/
 *.swp
-*.swo 
+*.swo
+
+# Docker
+.docker/
+docker-compose.override.yml 
