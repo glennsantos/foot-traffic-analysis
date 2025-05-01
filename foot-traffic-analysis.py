@@ -40,7 +40,9 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=500):
     }
 
     G = ox.graph_from_point(location_point, dist=radius_m, network_type='walk')
-    intersection_count = ox.count_intersections(G)
+    # Count intersections by counting nodes with more than one edge
+    nodes, edges = ox.graph_to_gdfs(G)
+    intersection_count = len(nodes[nodes.street_count > 1])
 
     counts["intersection_count"] = intersection_count
 
