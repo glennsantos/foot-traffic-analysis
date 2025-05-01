@@ -1,59 +1,116 @@
 import osmnx as ox
 import pandas as pd
+import json
+import traceback
 
-def extract_osm_foot_traffic_indicators(lat, lon, radius_m=500):
-    location_point = (lat, lon)
+def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300):
+    try:
+        print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
+        location_point = (lat, lon)
 
-    poi_tags = {
-        "amenity": [
-            "restaurant", "cafe", "fast_food", "bar", "food_court",
-            "school", "university", "college", "hospital", "clinic",
-            "place_of_worship", "marketplace"
-        ],
-        "shop": True,
-        "leisure": True,
-        "tourism": True,
-        "public_transport": True,
-        "highway": ["bus_stop", "crossing"]
-    }
+        poi_tags = {
+            "amenity": [
+                "restaurant", "cafe", "fast_food", "bar", "food_court",
+                "school", "university", "college", "hospital", "clinic",
+                "place_of_worship", "marketplace"
+            ],
+            "shop": True,
+            "leisure": True,
+            "tourism": True,
+            "public_transport": True,
+            "highway": ["bus_stop", "crossing"]
+        }
 
-    pois = ox.features_from_point(location_point, tags=poi_tags, dist=radius_m)
+        print("Fetching POIs from OpenStreetMap...")
+        pois = ox.features_from_point(location_point, tags=poi_tags, dist=radius_m)
+        print(f"Found {len(pois)} POIs")
 
-    def count_tag(pois_df, key, values=None):
-        if key not in pois_df.columns:
-            return 0
-        if values is None:
-            return pois_df[key].notnull().sum()
-        return pois_df[pois_df[key].isin(values)].shape[0]
+        def get_place_details(row):
+            try:
+                name = row.get('name', '')
+                if not name:
+                    # Try to get some identifying information if name is missing
+                    if 'brand' in row:
+                        name = row['brand']
+                    elif 'operator' in row:
+                        name = row['operator']
+                    else:
+                        name = 'Unnamed'
+                
+                addr = row.get('addr:street', '')
+                if addr:
+                    return f"{name} ({addr})"
+                return name
+            except Exception as e:
+                print(f"Error getting place details: {str(e)}")
+                return "Unknown Place"
 
-    counts = {
-        "latitude": lat,
-        "longitude": lon,
-        "restaurants_and_cafes": count_tag(pois, "amenity", ["restaurant", "cafe", "fast_food", "bar", "food_court"]),
-        "schools_universities": count_tag(pois, "amenity", ["school", "university", "college"]),
-        "hospitals_clinics": count_tag(pois, "amenity", ["hospital", "clinic"]),
-        "markets": count_tag(pois, "amenity", ["marketplace"]),
-        "places_of_worship": count_tag(pois, "amenity", ["place_of_worship"]),
-        "tourist_sites": count_tag(pois, "tourism"),
-        "leisure_places": count_tag(pois, "leisure"),
-        "shops": count_tag(pois, "shop"),
-        "bus_stops": count_tag(pois, "highway", ["bus_stop"]),
-        "pedestrian_crossings": count_tag(pois, "highway", ["crossing"])
-    }
+        def collect_places(pois_df, key, values=None):
+            try:
+                if key not in pois_df.columns:
+                    return {'count': 0, 'places': []}
+                
+                if values is None:
+                    filtered_df = pois_df[pois_df[key].notnull()]
+                else:
+                    filtered_df = pois_df[pois_df[key].isin(values)]
+                
+                places = []
+                for _, row in filtered_df.iterrows():
+                    place_detail = get_place_details(row)
+                    if place_detail:
+                        places.append(place_detail)
+                
+                return {
+                    'count': len(places),
+                    'places': places
+                }
+            except Exception as e:
+                print(f"Error collecting places for {key}: {str(e)}")
+                return {'count': 0, 'places': []}
 
-    G = ox.graph_from_point(location_point, dist=radius_m, network_type='walk')
-    # Count intersections by counting nodes with more than one edge
-    nodes, edges = ox.graph_to_gdfs(G)
-    intersection_count = len(nodes[nodes.street_count > 1])
+        print("Processing POIs by category...")
+        food_places = collect_places(pois, "amenity", ["restaurant", "cafe", "fast_food", "bar", "food_court"])
+        education = collect_places(pois, "amenity", ["school", "university", "college"])
+        healthcare = collect_places(pois, "amenity", ["hospital", "clinic"])
+        markets = collect_places(pois, "amenity", ["marketplace"])
+        worship = collect_places(pois, "amenity", ["place_of_worship"])
+        tourist = collect_places(pois, "tourism")
+        leisure = collect_places(pois, "leisure")
+        shops = collect_places(pois, "shop")
+        bus_stops = collect_places(pois, "highway", ["bus_stop"])
+        crossings = collect_places(pois, "highway", ["crossing"])
 
-    counts["intersection_count"] = intersection_count
+        print("Analyzing street network...")
+        G = ox.graph_from_point(location_point, dist=radius_m, network_type='walk')
+        nodes, edges = ox.graph_to_gdfs(G)
+        intersection_count = len(nodes[nodes.street_count > 1])
+        print(f"Found {intersection_count} intersections")
 
-    return pd.DataFrame([counts])
+        analysis = {
+            "latitude": lat,
+            "longitude": lon,
+            "restaurants_and_cafes": food_places,
+            "schools_universities": education,
+            "hospitals_clinics": healthcare,
+            "markets": markets,
+            "places_of_worship": worship,
+            "tourist_sites": tourist,
+            "leisure_places": leisure,
+            "shops": shops,
+            "bus_stops": bus_stops,
+            "pedestrian_crossings": crossings,
+            "intersection_count": intersection_count
+        }
 
-# Example: Intramuros, Manila
-df = extract_osm_foot_traffic_indicators(14.5896, 120.9747)
-print(df)
+        # Create a DataFrame with just the counts for backward compatibility
+        counts = {k: v['count'] if isinstance(v, dict) else v 
+                for k, v in analysis.items()}
+        
+        print("Analysis completed successfully")
+        return pd.DataFrame([counts]), analysis
 
-# Save results to JSON file
-df.to_json('foot_traffic_results.json', orient='records')
-print("\nResults have been saved to 'foot_traffic_results.json'")
+    except Exception as e:
+        error_msg = f"Error in extract_osm_foot_traffic_indicators: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        raise Exception(error_msg)

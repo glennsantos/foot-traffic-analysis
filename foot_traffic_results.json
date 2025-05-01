@@ -1,1 +1,145 @@
-[{"latitude":14.5896,"longitude":120.9747,"restaurants_and_cafes":47,"schools_universities":8,"hospitals_clinics":3,"markets":0,"places_of_worship":3,"tourist_sites":44,"leisure_places":41,"shops":30,"bus_stops":5,"pedestrian_crossings":39,"intersection_count":347}]
+{
+  "latitude": 14.5896,
+  "longitude": 120.9747,
+  "restaurants_and_cafes": {
+    "count": 25,
+    "places": [
+      "Ilustrado (nan)",
+      "Liezel's Place (nan)",
+      "Sunlai Foodhouse (nan)",
+      "Casa Marinero II (Cabildo Street)",
+      "Pepito Foodhouse (Solana Street)",
+      "Flower Stories Cafe (nan)",
+      "Patio de Conchita (nan)",
+      "Ristorante delle Mitre (General Luna)",
+      "Starbucks (General Luna Street)",
+      "Barbara\u2019s Casa Manila (nan)",
+      "Kabayan Food House (Santa Potenciana Street)",
+      "La Cathedral Cafe (nan)",
+      "Bataka Bar (nan)",
+      "Belfry Caf\u00e9 (Cabildo Street)",
+      "Casa Marinero (nan)",
+      "Balai Maria (nan)",
+      "Cafe Sofia (General Luna Street)",
+      "Cafe Intramuros (General Luna Street)",
+      "Batala Bar (General Luna Street)",
+      "Tesoros (General Luna Street)",
+      "Parers Kimchi (nan)",
+      "Cafe Janealo (nan)",
+      "Aujen's Coffee (Cabildo)",
+      "nan (nan)",
+      "Dexter Pizza-Sisay's (nan)"
+    ]
+  },
+  "schools_universities": {
+    "count": 4,
+    "places": [
+      "Lyceum of the Philippines University (nan)",
+      "Colegio de Santa Rosa (nan)",
+      "Pamantasan ng Lungsod ng Maynila (General Luna Street)",
+      "Map\u00faa University (Muralla Street)"
+    ]
+  },
+  "hospitals_clinics": {
+    "count": 2,
+    "places": [
+      "Windsor International Maritime Clinic, Inc. (General Luna)",
+      "AMOSUP Seamen's Hospital (Cabildo)"
+    ]
+  },
+  "markets": {
+    "count": 0,
+    "places": []
+  },
+  "places_of_worship": {
+    "count": 3,
+    "places": [
+      "San Agustin Church (General Luna Street)",
+      "Joy Student Center (nan)",
+      "Manila Cathedral (Cabildo Street)"
+    ]
+  },
+  "tourist_sites": {
+    "count": 22,
+    "places": [
+      "nan (nan)",
+      "White Knight Hotel Intramuros (Urdaneta Street)",
+      "Sailor's Home (nan)",
+      "Amosup Sailors Home (nan)",
+      "608 Boarding House (Cabildo)",
+      "Casa Manila (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "Homeless Jesus (nan)",
+      "Museum of the Chinese in Philippine Life (nan)",
+      "Clamshell One (nan)",
+      "Museo de Intramuros (Arzobispo)",
+      "San Agustin Church (General Luna Street)",
+      "Residencia 729 (Santa Potenciana Street)",
+      "Casa Manila (nan)",
+      "nan (nan)",
+      "Bagumbayan Light and Sound Museum (Santa Lucia Street)",
+      "San Agustin Museum (nan)"
+    ]
+  },
+  "leisure_places": {
+    "count": 14,
+    "places": [
+      "nan (nan)",
+      "Club Intramuros Golf Course (nan)",
+      "Plaza de Roma (nan)",
+      "nan (nan)",
+      "Inner Garden (nan)",
+      "nan (nan)",
+      "Plazuela de Santa Isabel (nan)",
+      "nan (nan)",
+      "Plaza Willard (nan)",
+      "nan (nan)",
+      "Rajah Sulayman Gymnasium (nan)",
+      "Rufino J. Cardinal Santos Bell Garden (nan)",
+      "Jardin Padre Blanco (nan)",
+      "nan (nan)"
+    ]
+  },
+  "shops": {
+    "count": 18,
+    "places": [
+      "Uncle John's (Arzobispo Street)",
+      "Pointer Enterprises Inc (Cabildo)",
+      "Silahis Art & Artifacts (nan)",
+      "Morbai Charts/Maps & Maritime Supplies (nan)",
+      "Bambikes (General Luna Street)",
+      "CF Sharp Crew Management Inc. (General Luna Street)",
+      "NYK Shipping (General Luna Street)",
+      "7-Eleven (Cabildo Street)",
+      "7-Eleven (Solana)",
+      "J.S. Contractor Inc. (Magallanes)",
+      "nan (nan)",
+      "Solidum Vulcanzing (Real Street)",
+      "MK Cookies & Pastries (nan)",
+      "Laiko Souvenir Shop (nan)",
+      "Asian Favorites Food Mart (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "Adam's Tailoring (nan)"
+    ]
+  },
+  "bus_stops": {
+    "count": 0,
+    "places": []
+  },
+  "pedestrian_crossings": {
+    "count": 4,
+    "places": [
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)",
+      "nan (nan)"
+    ]
+  },
+  "intersection_count": 119
+}

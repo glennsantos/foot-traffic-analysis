@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-05-01T09:56:56.507728",
+  "location_name": "unknown_location",
+  "latitude": 14.180141388224987,
+  "longitude": 120.96059918403627,
+  "radius_meters": 300,
+  "analysis": {
+    "latitude": 14.180141388224987,
+    "longitude": 120.96059918403627,
+    "restaurants_and_cafes": {
+      "count": 4,
+      "places": [
+        "Aling Tonya Seaside Dampa (Emilio Aguinaldo Highway)",
+        "Jollibee (Emilio Aguinaldo Highway)",
+        "Teresa's Restaurant Garden (nan)",
+        "SushiSendo (nan)"
+      ]
+    },
+    "schools_universities": {
+      "count": 1,
+      "places": [
+        "Lalaan I Elementary School (nan)"
+      ]
+    },
+    "hospitals_clinics": {
+      "count": 0,
+      "places": []
+    },
+    "markets": {
+      "count": 0,
+      "places": []
+    },
+    "places_of_worship": {
+      "count": 0,
+      "places": []
+    },
+    "tourist_sites": {
+      "count": 0,
+      "places": []
+    },
+    "leisure_places": {
+      "count": 0,
+      "places": []
+    },
+    "shops": {
+      "count": 5,
+      "places": [
+        "SPJ Furniture  (nan)",
+        "Itlog ni Kuya (nan)",
+        "Acienda Designer Outlet (Emilio Aguinaldo Highway)",
+        "SylPaulJoy (nan)",
+        "Hyundai Silang (Emilio Aguinaldo Highway)"
+      ]
+    },
+    "bus_stops": {
+      "count": 1,
+      "places": [
+        "nan (nan)"
+      ]
+    },
+    "pedestrian_crossings": {
+      "count": 0,
+      "places": []
+    },
+    "intersection_count": 14
+  }
+}

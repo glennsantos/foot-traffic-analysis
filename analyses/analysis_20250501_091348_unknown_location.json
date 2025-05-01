@@ -1,0 +1,21 @@
+{
+  "timestamp": "2025-05-01T09:13:48.139457",
+  "location_name": "unknown_location",
+  "latitude": 14.551422708409929,
+  "longitude": 121.04557156562807,
+  "analysis": {
+    "latitude": 14.551422708409929,
+    "longitude": 121.04557156562807,
+    "restaurants_and_cafes": 228,
+    "schools_universities": 3,
+    "hospitals_clinics": 6,
+    "markets": 0,
+    "places_of_worship": 0,
+    "tourist_sites": 23,
+    "leisure_places": 86,
+    "shops": 158,
+    "bus_stops": 10,
+    "pedestrian_crossings": 210,
+    "intersection_count": 609
+  }
+}
