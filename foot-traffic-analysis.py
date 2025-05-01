@@ -17,7 +17,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=500):
         "highway": ["bus_stop", "crossing"]
     }
 
-    pois = ox.geometries_from_point(location_point, tags=poi_tags, dist=radius_m)
+    pois = ox.features_from_point(location_point, tags=poi_tags, dist=radius_m)
 
     def count_tag(pois_df, key, values=None):
         if key not in pois_df.columns:
