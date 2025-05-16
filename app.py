@@ -1,12 +1,22 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 from foot_traffic_analysis import extract_osm_foot_traffic_indicators
 import json
 from datetime import datetime
 import os
 import requests
 import traceback
+from functools import wraps
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Required for session
+
+# Simple in-memory storage for demo (replace with a database in production)
+last_searches = {}
+
+def get_client_ip():
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0]
+    return request.remote_addr
 
 # Create analyses directory if it doesn't exist
 if not os.path.exists('analyses'):
@@ -28,6 +38,22 @@ def get_location_name(lat, lon):
 def index():
     return render_template('index.html')
 
+@app.route('/api/last-search', methods=['GET'])
+def get_last_search():
+    try:
+        client_ip = get_client_ip()
+        last_search = last_searches.get(client_ip)
+        if last_search:
+            return jsonify({
+                'success': True,
+                'lat': last_search['lat'],
+                'lon': last_search['lon'],
+                'radius': last_search['radius']
+            })
+        return jsonify({'success': False, 'message': 'No previous search found'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
@@ -37,6 +63,15 @@ def analyze():
         radius = int(data.get('radius', 300))  # Default to 300m if not specified
         
         print(f"\nAnalyzing location: lat={lat}, lon={lon}, radius={radius}m")
+        
+        # Store the search in session
+        client_ip = get_client_ip()
+        last_searches[client_ip] = {
+            'lat': lat,
+            'lon': lon,
+            'radius': radius,
+            'timestamp': datetime.now().isoformat()
+        }
         
         # Get analysis results
         results, analysis = extract_osm_foot_traffic_indicators(lat, lon, radius_m=radius)
@@ -75,4 +110,4 @@ def analyze():
         return jsonify({'error': error_msg}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8081) 
+    app.run(debug=True, host='0.0.0.0', port=1010) 

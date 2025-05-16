@@ -16,14 +16,14 @@ A web application for analyzing foot traffic indicators using OpenStreetMap data
 
 2. **Run the container**
    ```bash
-   docker run -d -p 1010:1010 -v $(pwd)/analyses:/app/analyses --name foot-traffic-app foot-traffic-analysis
+   docker run -d -p 8081:8081 -v $(pwd)/analyses:/app/analyses --name foot-traffic-app foot-traffic-analysis
    ```
    - `-p 1010:1010` maps port 1010 on your host to port 1010 in the container
    - `-v $(pwd)/analyses:/app/analyses` mounts the local analyses directory to persist results
    - `--name foot-traffic-app` gives the container a name
 
 3. **Access the application**
-   Open your web browser and go to: http://localhost:1010
+   Open your web browser and go to: http://localhost:8081
 
 4. **Stopping the container**
    ```bash
