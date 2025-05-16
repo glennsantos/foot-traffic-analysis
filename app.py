@@ -103,7 +103,12 @@ def analyze():
         analysis_data['saved_file'] = filename
         analysis_data['radius_meters'] = radius
         
-        return jsonify(analysis_data)
+        # Ensure consistent property names with frontend
+        response_data = analysis_data.copy()
+        response_data['lat'] = lat
+        response_data['lon'] = lon
+        
+        return jsonify(response_data)
     except Exception as e:
         error_msg = f"Error during analysis: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
