@@ -14,8 +14,9 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
@@ -23,8 +24,13 @@ COPY . .
 # Create directories for cache and analyses
 RUN mkdir -p cache analyses
 
-# Expose port 3000
-EXPOSE 3000
+# Expose the application port
+EXPOSE 1010
+
+# Set environment variables
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_RUN_PORT=1010
 
 # Run the application
-CMD ["python3", "app.py"] 
+CMD ["flask", "run"] 
