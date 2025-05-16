@@ -21,16 +21,18 @@ RUN pip install --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Create directories for cache and analyses
-RUN mkdir -p cache analyses
+# Create directories for cache and analyses with correct permissions
+RUN mkdir -p cache analyses && \
+    chmod 777 analyses
 
 # Expose the application port
 EXPOSE 1010
 
 # Set environment variables
 ENV FLASK_APP=app.py
+ENV FLASK_ENV=development
 ENV FLASK_RUN_HOST=0.0.0.0
 ENV FLASK_RUN_PORT=1010
 
 # Run the application
-CMD ["flask", "run"] 
+CMD ["flask", "run"]
