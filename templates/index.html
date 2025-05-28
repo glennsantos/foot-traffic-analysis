@@ -257,8 +257,8 @@
             </div>
             <div class="radius-control">
                 <label for="radius">Analysis Radius (meters):</label>
-                <input type="number" id="radius" value="200" min="100" max="2000" step="100">
-                <span class="radius-display">Default: 200m</span>
+                <input type="number" id="radius" value="100" min="100" max="2000" step="100">
+                <span class="radius-display">Default: 100m</span>
             </div>
             <div id="map"></div>
         </div>
@@ -270,7 +270,7 @@
                     <h3>Location Analysis</h3>
                     <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                     <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">200</span> meters</p>
+                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">100</span> meters</p>
                     <div class="viability-summary" id="viability-summary" style="display: none;">
                         <div class="viability-score" id="viability-score"></div>
                         <div id="viability-details"></div>
@@ -410,7 +410,7 @@
 
                     searchTimeout = setTimeout(async () => {
                         try {
-                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`);
                             const results = await response.json();
                             
                             searchResults.innerHTML = '';
@@ -614,7 +614,7 @@
                         <h3>Location Analysis</h3>
                         <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                         <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">200</span> meters</p>
+                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">100</span> meters</p>
                         <div class="viability-summary" id="viability-summary" style="display: none;">
                             <div class="viability-score" id="viability-score"></div>
                             <div id="viability-details"></div>
@@ -733,7 +733,7 @@
                 'places_of_worship': 'Religious establishments including churches, mosques, and chapels',
                 'tourist_sites': 'Tourist attractions and points of interest including parks and leisure facilities',
                 'shops': 'Retail establishments and shopping venues',
-                'bus_stops': 'Public transportation stops for buses and jeepneys',
+                'transport_hubs': 'Public transportation stops for buses and jeepneys',
                 'pedestrian_crossings': 'Designated pedestrian crossing points and sidewalks',
                 'intersection_count': 'Number of road intersections in the area',
                 'office_buildings': 'Office buildings and commercial structures that generate B2B foot traffic',
@@ -747,11 +747,10 @@
                 'office_buildings': { threshold: 3, description: 'Should have ≥ 3 office buildings' },
                 'schools_universities': { threshold: 1, description: 'Should have ≥ 1 school or be near a campus' },
                 'hospitals_clinics': { threshold: 1, description: 'Should have ≥ 1 clinic or medical facility' },
-                'bus_stops': { threshold: 2, description: 'Should have ≥ 2 transit stops' },
+                'transport_hubs': { threshold: 2, description: 'Should have ≥ 2 transit stops' },
                 'parking_lots': { threshold: 1, description: 'Should have ≥ 1 parking facility' },
                 'pedestrian_crossings': { threshold: 3, description: 'Should have ≥ 3 pedestrian features' },
                 'markets': { threshold: 1, description: 'Should have ≥ 1 market or mall' },
-                'tourist_sites': { threshold: 1, description: 'Should have ≥ 1 tourist/leisure POI' },
                 'places_of_worship': { threshold: 1, description: 'Should have ≥ 1 large church/mosque OR ≥ 2 small chapels' }
             };
 

@@ -5,7 +5,7 @@ A web-based application for analyzing foot traffic indicators in specific locati
 ## Features
 
 - **Interactive Map Interface**: Click on any location or search for addresses
-- **Comprehensive Analysis**: Analyzes 10+ foot traffic indicators including:
+- **Comprehensive Analysis**: Analyzes 12 foot traffic indicators including:
   - Restaurants and cafes
   - Retail shops
   - Schools and universities
@@ -16,6 +16,8 @@ A web-based application for analyzing foot traffic indicators in specific locati
   - Places of worship
   - Pedestrian infrastructure
   - Road intersections
+  - Office buildings
+  - Parking facilities
 
 - **Viability Scoring**: Intelligent scoring system that ranks locations from "Excellent" to "Poor"
 - **PDF Reports**: Automatically generated detailed reports with:
@@ -57,7 +59,7 @@ A web-based application for analyzing foot traffic indicators in specific locati
    - Use the search box to find a specific address
 
 2. **Adjust Analysis Radius** (optional):
-   - Default: 200 meters
+   - Default: 100 meters
    - Range: 100-2000 meters
 
 3. **Start Analysis**:
@@ -74,84 +76,28 @@ A web-based application for analyzing foot traffic indicators in specific locati
 ## Understanding the Results
 
 ### Viability Ratings
-- **Excellent (80%+)**: Ideal for foot traffic-dependent businesses
-- **Good (65-79%)**: Suitable for most commercial activities
-- **Moderate (50-64%)**: Requires careful business planning
-- **Poor (<50%)**: Limited foot traffic potential
+- **Best (98%+)**: Ideal for premium retail and flagship stores
+- **Outstanding (95-97%)**: Exceptional foot traffic potential
+- **Excellent (85-94%)**: Highly suitable for foot traffic-dependent businesses
+- **Good (80-89%)**: Suitable for most commercial activities
+- **Moderate (70-79%)**: Requires careful business planning
+- **Poor (<70%)**: Limited foot traffic potential
 
 ### Key Indicators
 The analysis evaluates locations based on weighted criteria:
-- **Shops** (20% weight): Primary foot traffic generators
-- **Restaurants/Cafes** (15% weight): Consistent visitor attraction
-- **Intersections** (15% weight): Pedestrian movement indicators
-- **Public Transport** (12% weight): Commuter foot traffic
-- **Schools** (10% weight): Regular crowd generation
-- **Healthcare** (8% weight): Steady visitor flow
-- **Pedestrian Infrastructure** (8% weight): Walkability indicators
-- **Markets** (7% weight): Commercial activity concentration
-- **Tourist Sites** (3% weight): Occasional visitor attraction
-- **Places of Worship** (2% weight): Periodic gatherings
+- **Shops** (17% weight): Primary foot traffic generators
+- **Restaurants/Cafes** (13% weight): Consistent visitor attraction
+- **Intersections** (12% weight): Pedestrian movement indicators
+- **Office Buildings** (10% weight): Strong B2B lunch crowd drivers
+- **Transport Hubs** (10% weight): Commuter foot traffic
+- **Schools** (9% weight): Regular crowd generation
+- **Healthcare** (7% weight): Steady visitor flow
+- **Parking Lots** (7% weight): Drive-in accessibility boosters
+- **Pedestrian Infrastructure** (7% weight): Walkability indicators
+- **Markets** (6% weight): Commercial activity concentration
+- **Tourist Sites** (1% weight): Occasional visitor attraction
+- **Places of Worship** (1% weight): Periodic gatherings
 
 ## File Structure
 
 ```
-foot-traffic-analysis/
-├── app.py                          # Flask web application
-├── foot_traffic_analysis.py        # OSM data analysis engine
-├── pdf_report_generator.py         # PDF report generation
-├── templates/
-│   └── index.html                  # Web interface
-├── analyses_new/                   # JSON analysis results
-├── reports/                        # Generated PDF reports
-├── requirements.txt                # Python dependencies
-├── README.md                       # This file
-└── changelog.md                    # Version history
-```
-
-## Technical Details
-
-- **Backend**: Flask (Python)
-- **Frontend**: HTML/CSS/JavaScript with Leaflet.js
-- **Data Source**: OpenStreetMap via Overpass API
-- **Mapping**: OSMnx library for geospatial analysis
-- **PDF Generation**: ReportLab library
-- **Network Resilience**: Multiple API endpoints with failover
-- **Port**: 10101 (configurable)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Network Connectivity Errors**:
-   - The app automatically tries multiple OpenStreetMap servers
-   - Wait a few minutes and try again if servers are busy
-   - Check your internet connection
-
-2. **Analysis Takes Too Long**:
-   - Large radius areas take longer to process
-   - Reduce radius to 200-500m for faster results
-   - Urban areas with more data take longer
-
-3. **PDF Generation Fails**:
-   - Analysis will continue without PDF
-   - Check logs for specific error details
-   - Ensure sufficient disk space
-
-### Logs
-- Console output shows real-time progress
-- File logs saved to `app.log`
-- Frontend logs visible in browser console
-
-## Development
-
-The application is designed for production use with:
-- Real OpenStreetMap data (no mocks)
-- Comprehensive error handling
-- Network resilience features
-- Detailed logging and monitoring
-
-For development, the Flask debug mode is enabled by default.
-
-## License
-
-[Add your license information here]

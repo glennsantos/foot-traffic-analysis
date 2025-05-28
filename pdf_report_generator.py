@@ -24,7 +24,7 @@ class LocationViabilityReportGenerator:
             'intersection_count': {'threshold': 20, 'weight': 0.12, 'description': 'Road intersections indicate pedestrian movement'},
             'office_buildings': {'threshold': 3, 'weight': 0.10, 'description': 'Office buildings generate strong B2B lunch crowd traffic'},
             'schools_universities': {'threshold': 1, 'weight': 0.09, 'description': 'Educational institutions bring regular crowds'},
-            'bus_stops': {'threshold': 2, 'weight': 0.10, 'description': 'Public transport hubs concentrate pedestrians'},
+            'transport_hubs': {'threshold': 2, 'weight': 0.10, 'description': 'Public transport hubs concentrate pedestrians'},
             'hospitals_clinics': {'threshold': 1, 'weight': 0.07, 'description': 'Healthcare facilities ensure steady visitor flow'},
             'parking_lots': {'threshold': 1, 'weight': 0.07, 'description': 'Parking facilities boost drive-in accessibility'},
             'pedestrian_crossings': {'threshold': 3, 'weight': 0.07, 'description': 'Pedestrian infrastructure indicates walkability'},
@@ -122,21 +122,24 @@ class LocationViabilityReportGenerator:
         
         viability_percentage = (total_weighted_score / max_possible_score) * 100
         
-        if viability_percentage >= 80:
-            rating = "EXCELLENT"
+        if viability_percentage >= 98:
+            rating = "BEST"
+            color = colors.darkgreen
+        elif viability_percentage >= 95:
+            rating = "OUTSTANDING"
             color = colors.green
-        elif viability_percentage >= 65:
-            rating = "GOOD"
+        elif viability_percentage >= 85:
+            rating = "EXCELLENT"
             color = colors.blue
-        elif viability_percentage >= 50:
+        elif viability_percentage >= 80:
+            rating = "GOOD"
+            color = colors.darkblue
+        elif viability_percentage >= 70:
             rating = "MODERATE"
             color = colors.orange
-        elif viability_percentage >= 35:
+        else:
             rating = "POOR"
             color = colors.red
-        else:
-            rating = "VERY POOR"
-            color = colors.darkred
         
         return viability_percentage, rating, color
     
@@ -167,9 +170,9 @@ class LocationViabilityReportGenerator:
         • This location shows <b>{rating.lower()}</b> potential for foot traffic generation<br/>
         """
         
-        if viability_percentage >= 65:
+        if viability_percentage >= 85:
             summary += "• <b>Recommendation:</b> Highly suitable for foot traffic-dependent businesses<br/>"
-        elif viability_percentage >= 50:
+        elif viability_percentage >= 70:
             summary += "• <b>Recommendation:</b> Moderately suitable, consider specific business type<br/>"
         else:
             summary += "• <b>Recommendation:</b> Consider alternative locations or targeted improvements<br/>"
@@ -205,6 +208,43 @@ class LocationViabilityReportGenerator:
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+        ]))
+        
+        return table
+    
+    def create_places_table(self, indicator_name, places_data):
+        """Create detailed places table with name, coordinates, and address"""
+        if not places_data or len(places_data) == 0:
+            return None
+        
+        # Create table data
+        data = [['Name', 'Latitude', 'Longitude', 'Address']]
+        
+        for place in places_data[:20]:  # Limit to first 20 places to avoid overly long tables
+            lat_str = f"{place['latitude']:.6f}" if place['latitude'] is not None else "N/A"
+            lon_str = f"{place['longitude']:.6f}" if place['longitude'] is not None else "N/A"
+            
+            data.append([
+                place['name'][:30] + "..." if len(place['name']) > 30 else place['name'],
+                lat_str,
+                lon_str,
+                place['address'][:40] + "..." if len(place['address']) > 40 else place['address']
+            ])
+        
+        # Create table
+        table = Table(data, colWidths=[2.2*inch, 1.2*inch, 1.2*inch, 2.4*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP')
         ]))
         
         return table
@@ -266,12 +306,33 @@ class LocationViabilityReportGenerator:
             # Description
             story.append(Paragraph(f"<b>Analysis:</b> {score['description']}", self.styles['Normal']))
             
-            # Places (if available and not too many)
-            if score['places'] and len(score['places']) <= 10:
-                places_text = f"<b>Notable Places:</b> {', '.join(score['places'][:5])}"
-                if len(score['places']) > 5:
-                    places_text += f" (and {len(score['places'])-5} more)"
-                story.append(Paragraph(places_text, self.styles['Normal']))
+            # Detailed places table (if available)
+            if score['places'] and len(score['places']) > 0:
+                # Get detailed places data from analysis_data
+                detailed_places = None
+                if score['indicator'] in analysis_data:
+                    indicator_data = analysis_data[score['indicator']]
+                    if isinstance(indicator_data, dict) and 'detailed_places' in indicator_data:
+                        detailed_places = indicator_data['detailed_places']
+                
+                if detailed_places and len(detailed_places) > 0:
+                    story.append(Spacer(1, 8))
+                    story.append(Paragraph(f"<b>Detailed Places List:</b>", self.styles['Normal']))
+                    story.append(Spacer(1, 4))
+                    
+                    places_table = self.create_places_table(indicator_name, detailed_places)
+                    if places_table:
+                        story.append(places_table)
+                        
+                        if len(detailed_places) > 20:
+                            story.append(Spacer(1, 4))
+                            story.append(Paragraph(f"<i>Showing first 20 of {len(detailed_places)} places</i>", self.styles['Normal']))
+                else:
+                    # Fallback to simple places list if detailed data not available
+                    places_text = f"<b>Notable Places:</b> {', '.join(score['places'][:5])}"
+                    if len(score['places']) > 5:
+                        places_text += f" (and {len(score['places'])-5} more)"
+                    story.append(Paragraph(places_text, self.styles['Normal']))
             
             story.append(Spacer(1, 12))
         
@@ -310,7 +371,15 @@ class LocationViabilityReportGenerator:
         for foot traffic generation. The analysis shows {criteria_met} out of {total_criteria} key criteria are met.<br/><br/>
         """
         
-        if viability_percentage >= 80:
+        if viability_percentage >= 95:
+            conclusion += """
+            <b>Recommendations:</b><br/>
+            • This location is <b>outstanding/best</b> for foot traffic-dependent businesses<br/>
+            • Ideal for premium retail, flagship stores, or high-end restaurants<br/>
+            • Exceptional infrastructure supports maximum business potential<br/>
+            • Consider premium positioning and pricing strategies<br/><br/>
+            """
+        elif viability_percentage >= 85:
             conclusion += """
             <b>Recommendations:</b><br/>
             • This location is <b>excellent</b> for foot traffic-dependent businesses<br/>
@@ -318,7 +387,7 @@ class LocationViabilityReportGenerator:
             • The strong infrastructure supports premium positioning<br/>
             • Monitor peak hours to optimize operations<br/><br/>
             """
-        elif viability_percentage >= 65:
+        elif viability_percentage >= 80:
             conclusion += """
             <b>Recommendations:</b><br/>
             • This location is <b>good</b> for most commercial activities<br/>
@@ -326,7 +395,7 @@ class LocationViabilityReportGenerator:
             • Consider targeted marketing to maximize foot traffic<br/>
             • Address weaker indicators through partnerships or improvements<br/><br/>
             """
-        elif viability_percentage >= 50:
+        elif viability_percentage >= 70:
             conclusion += """
             <b>Recommendations:</b><br/>
             • This location has <b>moderate</b> potential requiring careful planning<br/>
@@ -337,7 +406,7 @@ class LocationViabilityReportGenerator:
         else:
             conclusion += """
             <b>Recommendations:</b><br/>
-            • This location shows <b>limited</b> foot traffic potential<br/>
+            • This location shows <b>poor</b> foot traffic potential<br/>
             • Consider alternative locations for foot traffic-dependent businesses<br/>
             • If proceeding, focus on destination businesses with strong marketing<br/>
             • Evaluate infrastructure improvements or wait for area development<br/><br/>

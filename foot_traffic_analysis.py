@@ -39,7 +39,7 @@ def get_working_endpoint():
     print("⚠ No endpoints responding, using default")
     return OVERPASS_ENDPOINTS[0]
 
-def extract_osm_foot_traffic_indicators(lat, lon, radius_m=200, max_retries=3):
+def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
     try:
         print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
         
@@ -111,10 +111,64 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=200, max_retries=3):
                 print(f"Error getting place details: {str(e)}")
                 return "Unknown Place"
 
+        def get_detailed_place_info(row):
+            """Get detailed place information including coordinates and address"""
+            try:
+                name = row.get('name', '')
+                if not name:
+                    # Try to get some identifying information if name is missing
+                    if 'brand' in row:
+                        name = row['brand']
+                    elif 'operator' in row:
+                        name = row['operator']
+                    else:
+                        name = 'Unnamed'
+                
+                # Get coordinates from geometry
+                lat, lon = None, None
+                if hasattr(row, 'geometry') and row.geometry is not None:
+                    if hasattr(row.geometry, 'centroid'):
+                        # For polygons, use centroid
+                        centroid = row.geometry.centroid
+                        lat, lon = centroid.y, centroid.x
+                    elif hasattr(row.geometry, 'y') and hasattr(row.geometry, 'x'):
+                        # For points
+                        lat, lon = row.geometry.y, row.geometry.x
+                
+                # Get address information
+                street = row.get('addr:street', '')
+                housenumber = row.get('addr:housenumber', '')
+                city = row.get('addr:city', '')
+                
+                address_parts = []
+                if housenumber:
+                    address_parts.append(housenumber)
+                if street:
+                    address_parts.append(street)
+                if city:
+                    address_parts.append(city)
+                
+                address = ', '.join(address_parts) if address_parts else 'Address not available'
+                
+                return {
+                    'name': name,
+                    'latitude': lat,
+                    'longitude': lon,
+                    'address': address
+                }
+            except Exception as e:
+                print(f"Error getting detailed place info: {str(e)}")
+                return {
+                    'name': 'Unknown Place',
+                    'latitude': None,
+                    'longitude': None,
+                    'address': 'Address not available'
+                }
+
         def collect_places(pois_df, key, values=None):
             try:
                 if key not in pois_df.columns:
-                    return {'count': 0, 'places': []}
+                    return {'count': 0, 'places': [], 'detailed_places': []}
                 
                 if values is None:
                     filtered_df = pois_df[pois_df[key].notnull()]
@@ -122,18 +176,21 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=200, max_retries=3):
                     filtered_df = pois_df[pois_df[key].isin(values)]
                 
                 places = []
+                detailed_places = []
                 for _, row in filtered_df.iterrows():
                     place_detail = get_place_details(row)
                     if place_detail and place_detail != 'nan (nan)':  # Exclude 'nan (nan)' entries
                         places.append(place_detail)
+                        detailed_places.append(get_detailed_place_info(row))
                 
                 return {
                     'count': len(places),
-                    'places': places
+                    'places': places,
+                    'detailed_places': detailed_places
                 }
             except Exception as e:
                 print(f"Error collecting places for {key}: {str(e)}")
-                return {'count': 0, 'places': []}
+                return {'count': 0, 'places': [], 'detailed_places': []}
 
         print("Processing POIs by category...")
         food_places = collect_places(pois, "amenity", ["restaurant", "cafe", "fast_food", "bar", "food_court"])
@@ -197,7 +254,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=200, max_retries=3):
             "places_of_worship": worship,
             "tourist_sites": combined_tourist_leisure,  # Combined tourist and leisure places
             "shops": shops,
-            "bus_stops": bus_stops,
+            "transport_hubs": bus_stops,
             "pedestrian_crossings": crossings,
             "intersection_count": intersection_count,
             "office_buildings": combined_office_buildings,
