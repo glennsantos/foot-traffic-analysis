@@ -75,6 +75,15 @@
             color: #666;
             font-size: 0.9em;
         }
+        .instruction-text {
+            color: #555;
+            font-style: italic;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 3px;
+        }
         .meets-criteria {
             color: #28a745;
             font-weight: bold;
@@ -124,6 +133,52 @@
             background: rgba(255, 255, 255, 0.5);
             padding: 2px 4px;
             border-radius: 3px;
+        }
+        .viability-summary {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-radius: 5px;
+            border-left: 4px solid #2196f3;
+        }
+        .viability-score {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .viability-score.excellent {
+            color: #4caf50;
+        }
+        .viability-score.good {
+            color: #2196f3;
+        }
+        .viability-score.moderate {
+            color: #ff9800;
+        }
+        .viability-score.poor {
+            color: #f44336;
+        }
+        .pdf-download {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .download-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .download-btn:hover {
+            background-color: #c82333;
+            text-decoration: none;
+            color: white;
         }
         .radius-control {
             margin: 20px 0;
@@ -216,6 +271,17 @@
                     <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                     <p class="street-name">Location: <span id="location-name">Loading...</span></p>
                     <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
+                    <div class="viability-summary" id="viability-summary" style="display: none;">
+                        <div class="viability-score" id="viability-score"></div>
+                        <div id="viability-details"></div>
+                    </div>
+                    <div class="pdf-download" id="pdf-download" style="display: none;">
+                        <strong>📄 Detailed Report:</strong><br/>
+                        <a href="#" id="pdf-download-link" class="download-btn">Download PDF Report</a>
+                        <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                            Complete viability analysis with recommendations
+                        </div>
+                    </div>
                     <div class="save-info" id="save-info">
                         Analysis saved to: <code id="saved-file"></code>
                     </div>
@@ -255,9 +321,21 @@
                         marker.setLatLng(e.latlng);
                     } else {
                         marker = L.marker(e.latlng).addTo(map);
+                        
+                        // Add click handler to marker for analysis
+                        marker.on('click', function() {
+                            if (confirm('Start analysis for this location?')) {
+                                analyzeLocation(lat, lng);
+                            }
+                        });
                     }
                     
-                    analyzeLocation(lat, lng);
+                    // Update marker position for analysis
+                    marker._analysisLat = lat;
+                    marker._analysisLng = lng;
+                    
+                    // Show instruction to click marker for analysis
+                    showAnalysisInstruction();
                 });
             }
             
@@ -277,12 +355,30 @@
                         // Add marker for last searched location
                         if (marker) {
                             marker.setLatLng([lat, lon]);
+                            // Update click handler with new coordinates
+                            marker.off('click');
+                            marker.on('click', function() {
+                                if (confirm('Start analysis for this location?')) {
+                                    analyzeLocation(lat, lon);
+                                }
+                            });
                         } else {
                             marker = L.marker([lat, lon]).addTo(map);
+                            
+                            // Add click handler to marker for analysis
+                            marker.on('click', function() {
+                                if (confirm('Start analysis for this location?')) {
+                                    analyzeLocation(lat, lon);
+                                }
+                            });
                         }
                         
-                        // Analyze the last searched location
-                        analyzeLocation(lat, lon);
+                        // Update marker position for analysis
+                        marker._analysisLat = lat;
+                        marker._analysisLng = lon;
+                        
+                        // Show instruction to click marker for analysis
+                        showAnalysisInstruction();
                     }
                 } catch (error) {
                     console.error('Error loading last search:', error);
@@ -291,6 +387,7 @@
             
             // Call setup functions when the page loads
             document.addEventListener('DOMContentLoaded', () => {
+                document.querySelector('.loading').style.display = 'none';
                 setupMapClickHandler();
                 setupSearch();
                 loadLastSearch();
@@ -352,15 +449,36 @@
                                         // Update map view
                                         map.setView([result.lat, result.lon], 16);
                                         
+                                        const lat = parseFloat(result.lat);
+                                        const lng = parseFloat(result.lon);
+                                        
                                         // Add marker
                                         if (marker) {
-                                            marker.setLatLng([result.lat, result.lon]);
+                                            marker.setLatLng([lat, lng]);
+                                            // Update click handler with new coordinates
+                                            marker.off('click');
+                                            marker.on('click', function() {
+                                                if (confirm('Start analysis for this location?')) {
+                                                    analyzeLocation(lat, lng);
+                                                }
+                                            });
                                         } else {
-                                            marker = L.marker([result.lat, result.lon]).addTo(map);
+                                            marker = L.marker([lat, lng]).addTo(map);
+                                            
+                                            // Add click handler to marker for analysis
+                                            marker.on('click', function() {
+                                                if (confirm('Start analysis for this location?')) {
+                                                    analyzeLocation(lat, lng);
+                                                }
+                                            });
                                         }
                                         
-                                        // Analyze the location
-                                        analyzeLocation(parseFloat(result.lat), parseFloat(result.lon));
+                                        // Update marker position for analysis
+                                        marker._analysisLat = lat;
+                                        marker._analysisLng = lng;
+                                        
+                                        // Show instruction to click marker for analysis
+                                        showAnalysisInstruction();
                                     });
                                     
                                     // Add hover effect
@@ -392,49 +510,215 @@
                 });
             }
             
+            // Function to show instruction for analysis
+            function showAnalysisInstruction() {
+                const resultsElement = document.querySelector('.results');
+                const loadingElement = document.querySelector('.loading');
+                const errorElement = document.querySelector('.error');
+                
+                // Hide loading and error states
+                loadingElement.style.display = 'none';
+                errorElement.style.display = 'none';
+                
+                // Show instruction message
+                resultsElement.innerHTML = `
+                    <div class="location-info">
+                        <h3>Location Pinned</h3>
+                        <p>📍 Click on the marker to start analysis</p>
+                        <p class="instruction-text">You have pinned a location on the map. Click the red marker to analyze foot traffic indicators for this area. You will be asked to confirm before the analysis begins.</p>
+                    </div>
+                `;
+                resultsElement.style.display = 'block';
+            }
+            
+            // Function to log messages to console and optionally to user
+            function logMessage(message, showToUser = false, isError = false) {
+                console.log(`[FRONTEND LOG] ${new Date().toISOString()}: ${message}`);
+                
+                if (showToUser) {
+                    const resultsElement = document.querySelector('.results');
+                    const logDiv = document.createElement('div');
+                    logDiv.style.cssText = `
+                        padding: 8px;
+                        margin: 5px 0;
+                        border-radius: 3px;
+                        font-family: monospace;
+                        font-size: 12px;
+                        ${isError ? 'background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;' : 'background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;'}
+                    `;
+                    logDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                    
+                    // Insert at the top of results
+                    if (resultsElement.firstChild) {
+                        resultsElement.insertBefore(logDiv, resultsElement.firstChild);
+                    } else {
+                        resultsElement.appendChild(logDiv);
+                    }
+                    resultsElement.style.display = 'block';
+                }
+            }
+            
+            // Function to test network connectivity
+            async function testNetworkConnectivity() {
+                try {
+                    logMessage('Testing network connectivity...', true);
+                    const response = await fetch('/api/last-search', { 
+                        method: 'GET',
+                        cache: 'no-cache'
+                    });
+                    logMessage('✓ Network connectivity OK', true);
+                    return true;
+                } catch (error) {
+                    logMessage('✗ Network connectivity issue detected', true, true);
+                    return false;
+                }
+            }
+            
             // Function to analyze a location
             async function analyzeLocation(lat, lng) {
+                logMessage(`Starting analysis for coordinates: ${lat}, ${lng}`, true);
+                
+                // Test network connectivity first
+                const networkOk = await testNetworkConnectivity();
+                if (!networkOk) {
+                    const errorMsg = 'Network connectivity issue. Please check your internet connection and try again.';
+                    logMessage(errorMsg, true, true);
+                    displayError(new Error(errorMsg));
+                    return;
+                }
+                
+                // Use provided coordinates or fall back to marker coordinates
+                if (!lat && !lng && marker) {
+                    lat = marker._analysisLat;
+                    lng = marker._analysisLng;
+                    logMessage(`Using marker coordinates: ${lat}, ${lng}`);
+                }
+                
+                if (!lat || !lng) {
+                    const errorMsg = 'No location selected for analysis';
+                    logMessage(errorMsg, true, true);
+                    displayError(new Error(errorMsg));
+                    return;
+                }
+                
                 const radius = parseInt(document.getElementById('radius').value) || 500;
+                logMessage(`Analysis radius: ${radius}m`, true);
+                
                 const loadingElement = document.querySelector('.loading');
                 const errorElement = document.querySelector('.error');
                 const resultsElement = document.querySelector('.results');
                 
+                // Restore the proper results structure before starting analysis
+                resultsElement.innerHTML = `
+                    <div class="location-info">
+                        <h3>Location Analysis</h3>
+                        <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
+                        <p class="street-name">Location: <span id="location-name">Loading...</span></p>
+                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
+                        <div class="viability-summary" id="viability-summary" style="display: none;">
+                            <div class="viability-score" id="viability-score"></div>
+                            <div id="viability-details"></div>
+                        </div>
+                        <div class="pdf-download" id="pdf-download" style="display: none;">
+                            <strong>📄 Detailed Report:</strong><br/>
+                            <a href="#" id="pdf-download-link" class="download-btn">Download PDF Report</a>
+                            <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                                Complete viability analysis with recommendations
+                            </div>
+                        </div>
+                        <div class="save-info" id="save-info" style="display: none;">
+                            Analysis saved to: <code id="saved-file"></code>
+                        </div>
+                    </div>
+                    <table class="indicators-table">
+                        <thead>
+                            <tr>
+                                <th>Indicator</th>
+                                <th>Count</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="indicators-body">
+                        </tbody>
+                    </table>
+                `;
+                
                 loadingElement.style.display = 'block';
                 errorElement.style.display = 'none';
-                resultsElement.style.display = 'none';
+                resultsElement.style.display = 'block';
+                
+                logMessage('Clearing previous results and showing loading state', true);
                 
                 try {
                     // Get location name
-                    document.getElementById('location-name').textContent = 'Loading...';
+                    logMessage('Fetching location name from Nominatim...', true);
+                    const locationNameElement = document.getElementById('location-name');
+                    if (locationNameElement) {
+                        locationNameElement.textContent = 'Loading...';
+                    }
+                    
                     const locationName = await getLocationName(lat, lng);
-                    document.getElementById('location-name').textContent = locationName;
+                    if (locationNameElement) {
+                        locationNameElement.textContent = locationName;
+                    }
+                    logMessage(`Location name: ${locationName}`, true);
                     
                     // Make the API call to analyze the location
+                    logMessage('Sending analysis request to backend...', true);
+                    logMessage('⚠ This may take 1-3 minutes depending on network conditions', true);
+                    const requestBody = {
+                        lat: lat,
+                        lon: lng,
+                        radius: radius
+                    };
+                    logMessage(`Request body: ${JSON.stringify(requestBody)}`);
+                    
                     const response = await fetch('/analyze', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                            lat: lat,
-                            lon: lng,
-                            radius: radius
-                        })
+                        body: JSON.stringify(requestBody)
                     });
+                    
+                    logMessage(`Backend response status: ${response.status} ${response.statusText}`, true);
                     
                     if (!response.ok) {
                         const errorData = await response.json();
-                        throw new Error(errorData.error || 'Failed to analyze location');
+                        const errorMsg = errorData.error || 'Failed to analyze location';
+                        
+                        // Check if it's a network-related error
+                        if (errorMsg.includes('overpass') || errorMsg.includes('connection') || errorMsg.includes('timeout')) {
+                            logMessage('Network/API issue detected. The OpenStreetMap servers may be temporarily unavailable.', true, true);
+                            logMessage('Please try again in a few minutes.', true, true);
+                        }
+                        
+                        logMessage(`Backend error: ${errorMsg}`, true, true);
+                        throw new Error(errorMsg);
                     }
                     
+                    logMessage('Parsing response data...', true);
                     const data = await response.json();
+                    logMessage(`Received data keys: ${Object.keys(data).join(', ')}`);
+                    
+                    logMessage('Analysis completed successfully!', true);
                     displayResults(data);
                     
                 } catch (error) {
+                    const errorMsg = `Analysis failed: ${error.message}`;
+                    logMessage(errorMsg, true, true);
+                    
+                    // Provide helpful suggestions based on error type
+                    if (error.message.includes('overpass') || error.message.includes('connection')) {
+                        logMessage('💡 Suggestion: This appears to be a network connectivity issue with OpenStreetMap servers.', true);
+                        logMessage('💡 Try again in a few minutes, or check your internet connection.', true);
+                    }
+                    
                     console.error('Error:', error);
                     displayError(error);
                 } finally {
                     loadingElement.style.display = 'none';
+                    logMessage('Analysis process finished', true);
                 }
             }
 
@@ -509,109 +793,161 @@
 
             function displayResults(data) {
                 try {
-                    // Update location info
-                    document.getElementById('lat').textContent = data.lat.toFixed(4);
-                    document.getElementById('lng').textContent = data.lon.toFixed(4);
-                    document.getElementById('analysis-radius').textContent = data.radius_meters;
+                    // Update location info safely
+                    const latElement = document.getElementById('lat');
+                    const lngElement = document.getElementById('lng');
+                    const radiusElement = document.getElementById('analysis-radius');
+                    
+                    if (latElement) latElement.textContent = data.lat.toFixed(4);
+                    if (lngElement) lngElement.textContent = data.lon.toFixed(4);
+                    if (radiusElement) radiusElement.textContent = data.radius_meters;
+
+                    // Show viability summary if available
+                    if (data.viability_score !== undefined && data.viability_rating) {
+                        const summaryElement = document.getElementById('viability-summary');
+                        const scoreElement = document.getElementById('viability-score');
+                        const detailsElement = document.getElementById('viability-details');
+                        
+                        if (summaryElement && scoreElement && detailsElement) {
+                            const rating = data.viability_rating.toLowerCase();
+                            const scoreClass = rating === 'excellent' ? 'excellent' : 
+                                             rating === 'good' ? 'good' : 
+                                             rating === 'moderate' ? 'moderate' : 'poor';
+                            
+                            scoreElement.textContent = `Viability Score: ${data.viability_score.toFixed(1)}% (${data.viability_rating})`;
+                            scoreElement.className = `viability-score ${scoreClass}`;
+                            
+                            // Show summary details (strip HTML tags for display)
+                            if (data.viability_summary) {
+                                const summaryText = data.viability_summary.replace(/<[^>]*>/g, '').replace(/&bull;/g, '•');
+                                detailsElement.innerHTML = summaryText.replace(/\n/g, '<br/>');
+                            }
+                            
+                            summaryElement.style.display = 'block';
+                        }
+                    }
+
+                    // Show PDF download if available
+                    if (data.pdf_report) {
+                        const pdfDownloadElement = document.getElementById('pdf-download');
+                        const pdfLinkElement = document.getElementById('pdf-download-link');
+                        
+                        if (pdfDownloadElement && pdfLinkElement) {
+                            pdfLinkElement.href = `/download-report/${data.pdf_report}`;
+                            pdfDownloadElement.style.display = 'block';
+                        }
+                    }
 
                     // Show save information
                     if (data.saved_file) {
-                        document.getElementById('save-info').style.display = 'block';
-                        document.getElementById('saved-file').textContent = data.saved_file;
+                        const saveInfoElement = document.getElementById('save-info');
+                        const savedFileElement = document.getElementById('saved-file');
+                        if (saveInfoElement) saveInfoElement.style.display = 'block';
+                        if (savedFileElement) savedFileElement.textContent = data.saved_file;
                         delete data.saved_file;
                     }
                     delete data.radius_meters;  // Remove from data before displaying in table
+                    delete data.pdf_report;     // Remove from data before displaying in table
+                    delete data.viability_score; // Remove from data before displaying in table
+                    delete data.viability_rating; // Remove from data before displaying in table
+                    delete data.viability_summary; // Remove from data before displaying in table
 
                     // Clear previous results
                     const tbody = document.getElementById('indicators-body');
-                    tbody.innerHTML = '';
+                    if (tbody) {
+                        tbody.innerHTML = '';
 
-                // Add rows for each indicator
-                Object.entries(data).forEach(([key, value]) => {
-                    if (key !== 'latitude' && key !== 'longitude' && key !== 'saved_file') {
-                        const row = tbody.insertRow();
-                        const nameCell = row.insertCell(0);
-                        const countCell = row.insertCell(1);
-                        const descCell = row.insertCell(2);
-                        
-                        nameCell.textContent = formatIndicatorName(key);
-                        
-                        if (typeof value === 'object' && value.count !== undefined) {
-                            countCell.textContent = value.count;
-                            
-                            // Add checkmark if meets criteria
-                            const meetsCriteria = checkCriteria(key, value);
-                            if (meetsCriteria !== null) {
-                                const checkmark = document.createElement('span');
-                                checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
-                                checkmark.textContent = meetsCriteria ? '✓' : '✗';
-                                checkmark.title = criteria[key].description;
-                                countCell.appendChild(checkmark);
+                        // Add rows for each indicator
+                        Object.entries(data).forEach(([key, value]) => {
+                            if (key !== 'latitude' && key !== 'longitude' && key !== 'saved_file') {
+                                const row = tbody.insertRow();
+                                const nameCell = row.insertCell(0);
+                                const countCell = row.insertCell(1);
+                                const descCell = row.insertCell(2);
+                                
+                                nameCell.textContent = formatIndicatorName(key);
+                                
+                                if (typeof value === 'object' && value.count !== undefined) {
+                                    countCell.textContent = value.count;
+                                    
+                                    // Add checkmark if meets criteria
+                                    const meetsCriteria = checkCriteria(key, value);
+                                    if (meetsCriteria !== null) {
+                                        const checkmark = document.createElement('span');
+                                        checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
+                                        checkmark.textContent = meetsCriteria ? '✓' : '✗';
+                                        checkmark.title = criteria[key].description;
+                                        countCell.appendChild(checkmark);
 
-                                const criteriaNote = document.createElement('div');
-                                criteriaNote.className = 'criteria-note';
-                                criteriaNote.textContent = criteria[key].description;
-                                countCell.appendChild(criteriaNote);
+                                        const criteriaNote = document.createElement('div');
+                                        criteriaNote.className = 'criteria-note';
+                                        criteriaNote.textContent = criteria[key].description;
+                                        countCell.appendChild(criteriaNote);
+                                    }
+                                    
+                                    if (value.places && value.places.length > 0) {
+                                        const toggleBtn = document.createElement('span');
+                                        toggleBtn.className = 'show-places';
+                                        toggleBtn.textContent = 'Show Places';
+                                        countCell.appendChild(toggleBtn);
+
+                                        const placesList = document.createElement('ul');
+                                        placesList.className = 'places-list';
+                                        value.places.forEach(place => {
+                                            const li = document.createElement('li');
+                                            li.textContent = place;
+                                            placesList.appendChild(li);
+                                        });
+                                        countCell.appendChild(placesList);
+
+                                        toggleBtn.onclick = function() {
+                                            const isHidden = placesList.style.display === 'none' || !placesList.style.display;
+                                            placesList.style.display = isHidden ? 'block' : 'none';
+                                            toggleBtn.textContent = isHidden ? 'Hide Places' : 'Show Places';
+                                        };
+                                    }
+                                } else {
+                                    countCell.textContent = value;
+                                    // Add checkmark for non-object values (like intersection_count)
+                                    const meetsCriteria = checkCriteria(key, value);
+                                    if (meetsCriteria !== null) {
+                                        const checkmark = document.createElement('span');
+                                        checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
+                                        checkmark.textContent = meetsCriteria ? '✓' : '✗';
+                                        checkmark.title = criteria[key].description;
+                                        countCell.appendChild(checkmark);
+
+                                        const criteriaNote = document.createElement('div');
+                                        criteriaNote.className = 'criteria-note';
+                                        criteriaNote.textContent = criteria[key].description;
+                                        countCell.appendChild(criteriaNote);
+                                    }
+                                }
+                                
+                                descCell.textContent = indicatorDescriptions[key] || '';
+                                descCell.className = 'indicator-description';
                             }
-                            
-                            if (value.places && value.places.length > 0) {
-                                const toggleBtn = document.createElement('span');
-                                toggleBtn.className = 'show-places';
-                                toggleBtn.textContent = 'Show Places';
-                                countCell.appendChild(toggleBtn);
-
-                                const placesList = document.createElement('ul');
-                                placesList.className = 'places-list';
-                                value.places.forEach(place => {
-                                    const li = document.createElement('li');
-                                    li.textContent = place;
-                                    placesList.appendChild(li);
-                                });
-                                countCell.appendChild(placesList);
-
-                                toggleBtn.onclick = function() {
-                                    const isHidden = placesList.style.display === 'none' || !placesList.style.display;
-                                    placesList.style.display = isHidden ? 'block' : 'none';
-                                    toggleBtn.textContent = isHidden ? 'Hide Places' : 'Show Places';
-                                };
-                            }
-                        } else {
-                            countCell.textContent = value;
-                            // Add checkmark for non-object values (like intersection_count)
-                            const meetsCriteria = checkCriteria(key, value);
-                            if (meetsCriteria !== null) {
-                                const checkmark = document.createElement('span');
-                                checkmark.className = 'meets-criteria' + (meetsCriteria ? '' : ' fail');
-                                checkmark.textContent = meetsCriteria ? '✓' : '✗';
-                                checkmark.title = criteria[key].description;
-                                countCell.appendChild(checkmark);
-
-                                const criteriaNote = document.createElement('div');
-                                criteriaNote.className = 'criteria-note';
-                                criteriaNote.textContent = criteria[key].description;
-                                countCell.appendChild(criteriaNote);
-                            }
-                        }
-                        
-                        descCell.textContent = indicatorDescriptions[key] || '';
-                        descCell.className = 'indicator-description';
+                        });
                     }
-                });
 
-                // Show results
-                document.querySelector('.results').style.display = 'block';
-            } catch (error) {
-                displayError(error);
+                    // Show results
+                    const resultsElement = document.querySelector('.results');
+                    if (resultsElement) {
+                        resultsElement.style.display = 'block';
+                    }
+                } catch (error) {
+                    displayError(error);
+                }
             }
-        }
         
-        // Function to display error
-        function displayError(error) {
-            const errorElement = document.querySelector('.error');
-            errorElement.textContent = 'Error: ' + (error.message || 'An unknown error occurred');
-            errorElement.style.display = 'block';
-            document.querySelector('.loading').style.display = 'none';
-        }
-    </script>
+            // Function to display error
+            function displayError(error) {
+                const errorElement = document.querySelector('.error');
+                errorElement.textContent = 'Error: ' + (error.message || 'An unknown error occurred');
+                errorElement.style.display = 'block';
+                document.querySelector('.loading').style.display = 'none';
+            }
+        </script>
+    </div>
 </body>
 </html> 

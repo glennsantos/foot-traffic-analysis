@@ -4,8 +4,13 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for OSMnx
-RUN apt-get update && apt-get install -y \
+# Install system dependencies required for OSMnx with retry logic
+RUN echo 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::https::Timeout "120";' >> /etc/apt/apt.conf.d/80-retries && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
     libgdal-dev \
     gcc \
     g++ \

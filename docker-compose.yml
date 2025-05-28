@@ -2,7 +2,14 @@ version: '3.8'
 
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        - HTTP_PROXY=${HTTP_PROXY:-}
+        - HTTPS_PROXY=${HTTPS_PROXY:-}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "1010:1010"
     volumes:
@@ -17,6 +24,9 @@ services:
     user: "${UID}:${GID}"
     working_dir: /app
     restart: unless-stopped
+    extra_hosts:
+      - "overpass.kumi.systems:104.200.152.65"
+      - "overpass-api.de:176.28.50.165"
     
   # Uncomment and configure nginx if needed
   # nginx:

@@ -1,5 +1,4 @@
 # Cache directories
-cache/
 __pycache__/
 *.pyc
 
@@ -18,3 +17,5 @@ foot_traffic_results.json
 # Docker
 .docker/
 docker-compose.override.yml 
+reports/viability_report_20250528_094740_unknown_location_300m.pdf
+reports/viability_report_20250528_095916_unknown_location_300m.pdf
