@@ -10,5 +10,5 @@ Moderate 70 - 79%
 Poor <70%
 - [x] For the report, for each indicator, add the list of places as a table with the name, latlong and street location
 - [x] change label from "bus stops" to "transport hub"
-- [ ] change the title of the report to be the name of the nearest street + coordinates
-- [ ] make the zoom radius match the analysis radius
+- [x] change the title of the report to be the name of the nearest street + coordinates
+- [x] make the zoom radius match the analysis radius

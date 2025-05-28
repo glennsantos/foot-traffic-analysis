@@ -328,11 +328,40 @@ class LocationViabilityReportGenerator:
                             story.append(Spacer(1, 4))
                             story.append(Paragraph(f"<i>Showing first 20 of {len(detailed_places)} places</i>", self.styles['Normal']))
                 else:
-                    # Fallback to simple places list if detailed data not available
-                    places_text = f"<b>Notable Places:</b> {', '.join(score['places'][:5])}"
-                    if len(score['places']) > 5:
-                        places_text += f" (and {len(score['places'])-5} more)"
-                    story.append(Paragraph(places_text, self.styles['Normal']))
+                    # Fallback to simple places table using formatted place names
+                    story.append(Spacer(1, 8))
+                    story.append(Paragraph(f"<b>Places Found:</b>", self.styles['Normal']))
+                    story.append(Spacer(1, 4))
+                    
+                    # Create simple table with just place names
+                    places_data = [['Place Name']]
+                    for place_name in score['places'][:20]:  # Limit to first 20 places
+                        if place_name and place_name != 'nan (nan)':  # Filter out invalid entries
+                            places_data.append([place_name])
+                    
+                    if len(places_data) > 1:  # Only create table if we have actual places
+                        simple_table = Table(places_data, colWidths=[6*inch])
+                        simple_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 10),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                            ('FONTSIZE', (0, 1), (-1, -1), 9),
+                            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                            ('VALIGN', (0, 0), (-1, -1), 'TOP')
+                        ]))
+                        story.append(simple_table)
+                        
+                        if len(score['places']) > 20:
+                            story.append(Spacer(1, 4))
+                            story.append(Paragraph(f"<i>Showing first 20 of {len(score['places'])} places</i>", self.styles['Normal']))
+                    else:
+                        # If no valid places, show a simple text message
+                        story.append(Paragraph(f"No specific place names available for this indicator.", self.styles['Normal']))
             
             story.append(Spacer(1, 12))
         

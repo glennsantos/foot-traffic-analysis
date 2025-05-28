@@ -59,7 +59,7 @@ A web-based application for analyzing foot traffic indicators in specific locati
    - Use the search box to find a specific address
 
 2. **Adjust Analysis Radius** (optional):
-   - Default: 100 meters
+   - Default: 300 meters
    - Range: 100-2000 meters
 
 3. **Start Analysis**:

@@ -39,7 +39,7 @@ def get_working_endpoint():
     print("⚠ No endpoints responding, using default")
     return OVERPASS_ENDPOINTS[0]
 
-def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
+def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
     try:
         print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
         
@@ -93,18 +93,29 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
 
         def get_place_details(row):
             try:
-                name = row.get('name', '')
-                if not name:
-                    # Try to get some identifying information if name is missing
-                    if 'brand' in row:
-                        name = row['brand']
-                    elif 'operator' in row:
-                        name = row['operator']
-                    else:
-                        name = 'Unnamed'
+                # Handle both dict-like and Series objects
+                name = None
                 
-                addr = row.get('addr:street', '')
-                if addr:
+                # Try various name-related fields
+                name_fields = ['name', 'name:en', 'brand', 'operator', 'shop', 'amenity', 'tourism', 'leisure', 'office']
+                for field in name_fields:
+                    if hasattr(row, 'get'):
+                        value = row.get(field, '')
+                    elif hasattr(row, '__getitem__') and field in row:
+                        value = row[field]
+                    else:
+                        continue
+                    
+                    if value and str(value) not in ['', 'nan', 'None']:
+                        name = str(value)
+                        break
+                
+                if not name:
+                    name = 'Unnamed'
+                
+                # Get street address if available
+                addr = row.get('addr:street', '') if hasattr(row, 'get') else (row['addr:street'] if 'addr:street' in row else '')
+                if addr and str(addr) not in ['', 'nan', 'None']:
                     return f"{name} ({addr})"
                 return name
             except Exception as e:
@@ -114,15 +125,25 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
         def get_detailed_place_info(row):
             """Get detailed place information including coordinates and address"""
             try:
-                name = row.get('name', '')
-                if not name:
-                    # Try to get some identifying information if name is missing
-                    if 'brand' in row:
-                        name = row['brand']
-                    elif 'operator' in row:
-                        name = row['operator']
+                # Handle both dict-like and Series objects
+                name = None
+                
+                # Try various name-related fields
+                name_fields = ['name', 'name:en', 'brand', 'operator', 'shop', 'amenity', 'tourism', 'leisure', 'office']
+                for field in name_fields:
+                    if hasattr(row, 'get'):
+                        value = row.get(field, '')
+                    elif hasattr(row, '__getitem__') and field in row:
+                        value = row[field]
                     else:
-                        name = 'Unnamed'
+                        continue
+                    
+                    if value and str(value) not in ['', 'nan', 'None']:
+                        name = str(value)
+                        break
+                
+                if not name:
+                    name = 'Unnamed'
                 
                 # Get coordinates from geometry
                 lat, lon = None, None
@@ -136,17 +157,17 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
                         lat, lon = row.geometry.y, row.geometry.x
                 
                 # Get address information
-                street = row.get('addr:street', '')
-                housenumber = row.get('addr:housenumber', '')
-                city = row.get('addr:city', '')
+                street = row.get('addr:street', '') if hasattr(row, 'get') else (row['addr:street'] if 'addr:street' in row else '')
+                housenumber = row.get('addr:housenumber', '') if hasattr(row, 'get') else (row['addr:housenumber'] if 'addr:housenumber' in row else '')
+                city = row.get('addr:city', '') if hasattr(row, 'get') else (row['addr:city'] if 'addr:city' in row else '')
                 
                 address_parts = []
-                if housenumber:
-                    address_parts.append(housenumber)
-                if street:
-                    address_parts.append(street)
-                if city:
-                    address_parts.append(city)
+                if housenumber and str(housenumber) not in ['', 'nan', 'None']:
+                    address_parts.append(str(housenumber))
+                if street and str(street) not in ['', 'nan', 'None']:
+                    address_parts.append(str(street))
+                if city and str(city) not in ['', 'nan', 'None']:
+                    address_parts.append(str(city))
                 
                 address = ', '.join(address_parts) if address_parts else 'Address not available'
                 
@@ -204,7 +225,8 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
         leisure_places = collect_places(pois, "leisure")
         combined_tourist_leisure = {
             'count': tourist_places['count'] + leisure_places['count'],
-            'places': tourist_places['places'] + leisure_places['places']
+            'places': tourist_places['places'] + leisure_places['places'],
+            'detailed_places': tourist_places['detailed_places'] + leisure_places['detailed_places']
         }
 
         shops = collect_places(pois, "shop")
@@ -216,7 +238,8 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=100, max_retries=3):
         office_buildings_office = collect_places(pois, "office")
         combined_office_buildings = {
             'count': office_buildings_building['count'] + office_buildings_office['count'],
-            'places': office_buildings_building['places'] + office_buildings_office['places']
+            'places': office_buildings_building['places'] + office_buildings_office['places'],
+            'detailed_places': office_buildings_building['detailed_places'] + office_buildings_office['detailed_places']
         }
 
         # Parking lots - collect from amenity=parking

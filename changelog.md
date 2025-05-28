@@ -2,6 +2,89 @@
 
 All notable changes to the Foot Traffic Analysis application will be documented in this file.
 
+## [2025-05-28] - Enhanced Place Name Extraction Fix
+
+### Fixed
+- **"Unknown Place" in PDF Reports**: Fixed issue where many places were showing as "Unknown Place" in PDF reports
+  - Enhanced name extraction to check multiple OSM tags: name, name:en, brand, operator, shop, amenity, tourism, leisure, office
+  - Improved handling of pandas Series objects vs dict-like objects
+  - Better null/empty value checking to avoid 'nan' and 'None' strings
+  - Fixed missing `detailed_places` data for combined indicators (tourist sites and office buildings)
+
+### Technical Details
+- Modified `get_place_details()` and `get_detailed_place_info()` functions in `foot_traffic_analysis.py`
+- Added fallback logic to extract place names from various OSM tag types
+- Improved data type handling for both dictionary and pandas Series row objects
+- Enhanced address extraction with proper null checking
+
+### User Experience Improvements
+- PDF reports now show actual place names instead of "Unknown Place"
+- Better place identification using multiple OSM tag sources
+- More consistent place naming between web interface and PDF reports
+- Cleaner address formatting without 'nan' or empty values
+
+## [2025-05-28] - PDF Report Place Names Fix
+
+### Fixed
+- **PDF Report Place Names**: Fixed issue where place names were not properly displayed in PDF reports
+  - Place names like "OOTB (P. Cruz Street)", "Labarya (nan)", etc. now appear correctly in reports
+  - Enhanced fallback logic to create proper tables when detailed place data is unavailable
+  - Improved table formatting for better readability
+  - Filtered out invalid entries like "nan (nan)"
+
+### Technical Details
+- Modified `pdf_report_generator.py` fallback logic in the `generate_report` method
+- Created simple place name tables when detailed coordinates/addresses aren't available
+- Added proper table styling consistent with other report tables
+- Limited display to first 20 places per indicator to maintain report readability
+
+### User Experience Improvements
+- PDF reports now show the same place names visible in the web interface
+- Better organized place listings with proper table formatting
+- Clear indication when showing partial results (first 20 of many places)
+
+## [2025-05-28] - Default Radius Reversion
+
+### Changed
+- **Default Analysis Radius**: Reverted default analysis radius from 100m back to 300m
+  - Frontend input field default value: 300m
+  - Backend function parameter default: 300m
+  - Flask app fallback value: 300m
+  - JavaScript fallback values: 300m
+  - README documentation updated
+
+### Rationale
+- 300m provides better coverage for comprehensive foot traffic analysis
+- Balances analysis scope with processing time
+- More suitable for business location assessment
+
+## [2025-05-28] - Final Task Completion Update
+
+### Changed
+- **PDF Report Titles**: Report titles now display the actual location name and coordinates instead of generic "FOOT TRAFFIC VIABILITY ANALYSIS"
+  - Format: "STREET NAME, AREA, CITY (latitude, longitude)"
+  - Provides immediate location context in reports
+  - More professional and location-specific documentation
+
+### Added
+- **Visual Analysis Radius**: Map now displays a visual circle showing the exact analysis radius
+  - Blue circle overlay shows the precise area being analyzed
+  - Circle updates in real-time when radius is changed
+  - Helps users understand exactly what area is being evaluated
+  - Circle appears when marker is placed and updates with radius input changes
+
+### Technical Details
+- Modified `pdf_report_generator.py` to use dynamic location-based titles
+- Enhanced frontend with Leaflet circle overlay functionality
+- Added real-time radius circle updates via input event listeners
+- Circle styling: blue border with light blue fill (10% opacity)
+
+### User Experience Improvements
+- Better visual feedback for analysis area boundaries
+- More informative PDF report titles
+- Real-time visual updates when adjusting analysis parameters
+- Clear understanding of analysis scope before starting
+
 ## [2025-05-28] - Enhanced Business Indicators Update
 
 ### Added

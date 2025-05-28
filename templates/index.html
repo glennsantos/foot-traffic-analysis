@@ -257,8 +257,8 @@
             </div>
             <div class="radius-control">
                 <label for="radius">Analysis Radius (meters):</label>
-                <input type="number" id="radius" value="100" min="100" max="2000" step="100">
-                <span class="radius-display">Default: 100m</span>
+                <input type="number" id="radius" value="300" min="100" max="2000" step="100">
+                <span class="radius-display">Default: 300m</span>
             </div>
             <div id="map"></div>
         </div>
@@ -270,7 +270,7 @@
                     <h3>Location Analysis</h3>
                     <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                     <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">100</span> meters</p>
+                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
                     <div class="viability-summary" id="viability-summary" style="display: none;">
                         <div class="viability-score" id="viability-score"></div>
                         <div id="viability-details"></div>
@@ -334,6 +334,10 @@
                     marker._analysisLat = lat;
                     marker._analysisLng = lng;
                     
+                    // Update radius circle
+                    const radius = parseInt(document.getElementById('radius').value) || 300;
+                    updateRadiusCircle(lat, lng, radius);
+                    
                     // Show instruction to click marker for analysis
                     showAnalysisInstruction();
                 });
@@ -377,6 +381,9 @@
                         marker._analysisLat = lat;
                         marker._analysisLng = lon;
                         
+                        // Update radius circle
+                        updateRadiusCircle(lat, lon, radius);
+                        
                         // Show instruction to click marker for analysis
                         showAnalysisInstruction();
                     }
@@ -390,6 +397,7 @@
                 document.querySelector('.loading').style.display = 'none';
                 setupMapClickHandler();
                 setupSearch();
+                setupRadiusControl();
                 loadLastSearch();
             });
 
@@ -476,6 +484,10 @@
                                         // Update marker position for analysis
                                         marker._analysisLat = lat;
                                         marker._analysisLng = lng;
+                                        
+                                        // Update radius circle
+                                        const radius = parseInt(document.getElementById('radius').value) || 300;
+                                        updateRadiusCircle(lat, lng, radius);
                                         
                                         // Show instruction to click marker for analysis
                                         showAnalysisInstruction();
@@ -614,7 +626,7 @@
                         <h3>Location Analysis</h3>
                         <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                         <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">100</span> meters</p>
+                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
                         <div class="viability-summary" id="viability-summary" style="display: none;">
                             <div class="viability-score" id="viability-score"></div>
                             <div id="viability-details"></div>
@@ -723,7 +735,32 @@
             }
 
             let marker = null;
+            let radiusCircle = null;
             let searchTimeout = null;
+
+            // Function to update or create radius circle
+            function updateRadiusCircle(lat, lng, radius) {
+                // Remove existing circle
+                if (radiusCircle) {
+                    map.removeLayer(radiusCircle);
+                }
+                
+                // Create new circle
+                radiusCircle = L.circle([lat, lng], {
+                    color: '#007bff',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.1,
+                    radius: radius
+                }).addTo(map);
+            }
+
+            // Function to remove radius circle
+            function removeRadiusCircle() {
+                if (radiusCircle) {
+                    map.removeLayer(radiusCircle);
+                    radiusCircle = null;
+                }
+            }
 
             const indicatorDescriptions = {
                 'restaurants_and_cafes': 'Food establishments including restaurants, cafes, bars, and food courts',
@@ -976,6 +1013,19 @@
                 errorElement.textContent = 'Error: ' + (error.message || 'An unknown error occurred');
                 errorElement.style.display = 'block';
                 document.querySelector('.loading').style.display = 'none';
+            }
+
+            // Setup radius control functionality
+            function setupRadiusControl() {
+                const radiusInput = document.getElementById('radius');
+                
+                radiusInput.addEventListener('input', () => {
+                    // Update radius circle if marker exists
+                    if (marker && marker._analysisLat && marker._analysisLng) {
+                        const radius = parseInt(radiusInput.value) || 300;
+                        updateRadiusCircle(marker._analysisLat, marker._analysisLng, radius);
+                    }
+                });
             }
         </script>
     </div>
