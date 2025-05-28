@@ -108,7 +108,7 @@ def analyze():
         
         lat = float(data['lat'])
         lon = float(data['lon'])
-        radius = int(data.get('radius', 300))  # Default to 300m if not specified
+        radius = int(data.get('radius', 200))  # Default to 200m if not specified
         
         logger.info(f"Parsed coordinates: lat={lat}, lon={lon}, radius={radius}m")
         

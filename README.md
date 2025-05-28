@@ -57,13 +57,13 @@ A web-based application for analyzing foot traffic indicators in specific locati
    - Use the search box to find a specific address
 
 2. **Adjust Analysis Radius** (optional):
-   - Default: 300 meters
+   - Default: 200 meters
    - Range: 100-2000 meters
 
 3. **Start Analysis**:
-   - Click on the red marker
+   - Click on the pin
    - Confirm when prompted
-   - Wait for analysis to complete (1-3 minutes)
+   - Wait for analysis to complete (1-5 minutes)
 
 4. **View Results**:
    - **Viability Summary**: Overall score and rating
@@ -129,7 +129,7 @@ foot-traffic-analysis/
 
 2. **Analysis Takes Too Long**:
    - Large radius areas take longer to process
-   - Reduce radius to 300-500m for faster results
+   - Reduce radius to 200-500m for faster results
    - Urban areas with more data take longer
 
 3. **PDF Generation Fails**:

@@ -2,6 +2,45 @@
 
 All notable changes to the Foot Traffic Analysis application will be documented in this file.
 
+## [2025-05-28] - Enhanced Business Indicators Update
+
+### Added
+- **Office Buildings Indicator**: New indicator to track office buildings and commercial structures
+  - Threshold: ≥ 3 office buildings
+  - Weight: 10% (strong B2B lunch crowd driver)
+  - OSM Tags: `building=office`, `building=commercial`, `office=*`
+  - Description: Office buildings generate strong B2B lunch crowd traffic
+
+- **Parking Lots Indicator**: New indicator to track parking facilities
+  - Threshold: ≥ 1 parking facility
+  - Weight: 7% (boosts drive-in accessibility)
+  - OSM Tags: `amenity=parking`
+  - Description: Parking facilities boost drive-in accessibility
+
+### Changed
+- **Weight Redistribution**: Adjusted existing indicator weights to accommodate new indicators while maintaining 100% total:
+  - Restaurants/Cafes: 15% → 13%
+  - Shops: 20% → 17%
+  - Intersections: 15% → 12%
+  - Schools/Universities: 10% → 9%
+  - Bus Stops: 12% → 10%
+  - Healthcare: 8% → 7%
+  - Pedestrian Crossings: 8% → 7%
+  - Markets: 7% → 6%
+  - Tourist Sites: 3% → 1%
+  - Places of Worship: 2% → 1%
+
+### Technical Details
+- Updated `foot_traffic_analysis.py` to collect office and parking data from OSM
+- Modified `pdf_report_generator.py` with new criteria and weights
+- Enhanced frontend `index.html` with new indicator descriptions and thresholds
+- Maintained backward compatibility with existing analysis files
+
+### Business Impact
+- Better assessment of business district viability
+- Improved evaluation of accessibility for drive-in customers
+- More comprehensive foot traffic analysis for commercial locations
+
 ## [2025-05-28] - Network Resilience Update
 
 ### Fixed

@@ -39,7 +39,7 @@ def get_working_endpoint():
     print("⚠ No endpoints responding, using default")
     return OVERPASS_ENDPOINTS[0]
 
-def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
+def extract_osm_foot_traffic_indicators(lat, lon, radius_m=200, max_retries=3):
     try:
         print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
         
@@ -53,13 +53,15 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
             "amenity": [
                 "restaurant", "cafe", "fast_food", "bar", "food_court",
                 "school", "university", "college", "hospital", "clinic",
-                "place_of_worship", "marketplace"
+                "place_of_worship", "marketplace", "parking"
             ],
             "shop": True,
             "leisure": True,
             "tourism": True,
             "public_transport": True,
-            "highway": ["bus_stop", "crossing"]
+            "highway": ["bus_stop", "crossing"],
+            "building": ["office", "commercial"],
+            "office": True
         }
 
         print("Fetching POIs from OpenStreetMap...")
@@ -152,6 +154,17 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
         bus_stops = collect_places(pois, "highway", ["bus_stop"])
         crossings = collect_places(pois, "highway", ["crossing"])
 
+        # Office buildings - collect from building=office, building=commercial, and office tags
+        office_buildings_building = collect_places(pois, "building", ["office", "commercial"])
+        office_buildings_office = collect_places(pois, "office")
+        combined_office_buildings = {
+            'count': office_buildings_building['count'] + office_buildings_office['count'],
+            'places': office_buildings_building['places'] + office_buildings_office['places']
+        }
+
+        # Parking lots - collect from amenity=parking
+        parking_lots = collect_places(pois, "amenity", ["parking"])
+
         print("Analyzing street network...")
         # Use the same retry logic for street network
         G = None
@@ -186,7 +199,9 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
             "shops": shops,
             "bus_stops": bus_stops,
             "pedestrian_crossings": crossings,
-            "intersection_count": intersection_count
+            "intersection_count": intersection_count,
+            "office_buildings": combined_office_buildings,
+            "parking_lots": parking_lots
         }
 
         # Create a DataFrame with just the counts for backward compatibility

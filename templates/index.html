@@ -257,8 +257,8 @@
             </div>
             <div class="radius-control">
                 <label for="radius">Analysis Radius (meters):</label>
-                <input type="number" id="radius" value="300" min="100" max="2000" step="100">
-                <span class="radius-display">Default: 300m</span>
+                <input type="number" id="radius" value="200" min="100" max="2000" step="100">
+                <span class="radius-display">Default: 200m</span>
             </div>
             <div id="map"></div>
         </div>
@@ -270,7 +270,7 @@
                     <h3>Location Analysis</h3>
                     <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                     <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
+                    <p class="radius-display">Analysis Radius: <span id="analysis-radius">200</span> meters</p>
                     <div class="viability-summary" id="viability-summary" style="display: none;">
                         <div class="viability-score" id="viability-score"></div>
                         <div id="viability-details"></div>
@@ -282,7 +282,7 @@
                             Complete viability analysis with recommendations
                         </div>
                     </div>
-                    <div class="save-info" id="save-info">
+                    <div class="save-info" id="save-info" style="display: none;">
                         Analysis saved to: <code id="saved-file"></code>
                     </div>
                 </div>
@@ -499,7 +499,7 @@
                             console.error('Search error:', error);
                             searchResults.style.display = 'none';
                         }
-                    }, 300);
+                    }, 200);
                 });
 
                 // Hide results when clicking outside
@@ -525,7 +525,7 @@
                     <div class="location-info">
                         <h3>Location Pinned</h3>
                         <p>📍 Click on the marker to start analysis</p>
-                        <p class="instruction-text">You have pinned a location on the map. Click the red marker to analyze foot traffic indicators for this area. You will be asked to confirm before the analysis begins.</p>
+                        <p class="instruction-text">You have pinned a location on the map. Click the pin to analyze foot traffic indicators for this area. You will be asked to confirm before the analysis begins.</p>
                     </div>
                 `;
                 resultsElement.style.display = 'block';
@@ -614,7 +614,7 @@
                         <h3>Location Analysis</h3>
                         <p>Coordinates: <span id="lat"></span>, <span id="lng"></span></p>
                         <p class="street-name">Location: <span id="location-name">Loading...</span></p>
-                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">300</span> meters</p>
+                        <p class="radius-display">Analysis Radius: <span id="analysis-radius">200</span> meters</p>
                         <div class="viability-summary" id="viability-summary" style="display: none;">
                             <div class="viability-score" id="viability-score"></div>
                             <div id="viability-details"></div>
@@ -735,16 +735,20 @@
                 'shops': 'Retail establishments and shopping venues',
                 'bus_stops': 'Public transportation stops for buses and jeepneys',
                 'pedestrian_crossings': 'Designated pedestrian crossing points and sidewalks',
-                'intersection_count': 'Number of road intersections in the area'
+                'intersection_count': 'Number of road intersections in the area',
+                'office_buildings': 'Office buildings and commercial structures that generate B2B foot traffic',
+                'parking_lots': 'Parking facilities that improve drive-in accessibility'
             };
 
             const criteria = {
                 'restaurants_and_cafes': { threshold: 4, description: 'Should have ≥ 4 restaurants/cafes' },
                 'shops': { threshold: 8, description: 'Should have ≥ 8 shops/retail POIs' },
                 'intersection_count': { threshold: 20, description: 'Should have ≥ 20 intersections' },
+                'office_buildings': { threshold: 3, description: 'Should have ≥ 3 office buildings' },
                 'schools_universities': { threshold: 1, description: 'Should have ≥ 1 school or be near a campus' },
                 'hospitals_clinics': { threshold: 1, description: 'Should have ≥ 1 clinic or medical facility' },
                 'bus_stops': { threshold: 2, description: 'Should have ≥ 2 transit stops' },
+                'parking_lots': { threshold: 1, description: 'Should have ≥ 1 parking facility' },
                 'pedestrian_crossings': { threshold: 3, description: 'Should have ≥ 3 pedestrian features' },
                 'markets': { threshold: 1, description: 'Should have ≥ 1 market or mall' },
                 'tourist_sites': { threshold: 1, description: 'Should have ≥ 1 tourist/leisure POI' },
@@ -793,6 +797,8 @@
 
             function displayResults(data) {
                 try {
+                    console.log('displayResults called with data:', data);
+                    
                     // Update location info safely
                     const latElement = document.getElementById('lat');
                     const lngElement = document.getElementById('lng');
@@ -803,10 +809,22 @@
                     if (radiusElement) radiusElement.textContent = data.radius_meters;
 
                     // Show viability summary if available
+                    console.log('Checking viability data:', {
+                        score: data.viability_score,
+                        rating: data.viability_rating,
+                        summary: data.viability_summary ? 'present' : 'missing'
+                    });
+                    
                     if (data.viability_score !== undefined && data.viability_rating) {
                         const summaryElement = document.getElementById('viability-summary');
                         const scoreElement = document.getElementById('viability-score');
                         const detailsElement = document.getElementById('viability-details');
+                        
+                        console.log('Found viability elements:', {
+                            summary: !!summaryElement,
+                            score: !!scoreElement,
+                            details: !!detailsElement
+                        });
                         
                         if (summaryElement && scoreElement && detailsElement) {
                             const rating = data.viability_rating.toLowerCase();
@@ -824,18 +842,31 @@
                             }
                             
                             summaryElement.style.display = 'block';
+                            console.log('Viability summary displayed successfully');
                         }
+                    } else {
+                        console.log('Viability data not available or incomplete');
                     }
 
                     // Show PDF download if available
+                    console.log('Checking PDF report:', data.pdf_report);
+                    
                     if (data.pdf_report) {
                         const pdfDownloadElement = document.getElementById('pdf-download');
                         const pdfLinkElement = document.getElementById('pdf-download-link');
                         
+                        console.log('Found PDF elements:', {
+                            download: !!pdfDownloadElement,
+                            link: !!pdfLinkElement
+                        });
+                        
                         if (pdfDownloadElement && pdfLinkElement) {
                             pdfLinkElement.href = `/download-report/${data.pdf_report}`;
                             pdfDownloadElement.style.display = 'block';
+                            console.log('PDF download link set to:', pdfLinkElement.href);
                         }
+                    } else {
+                        console.log('PDF report not available');
                     }
 
                     // Show save information

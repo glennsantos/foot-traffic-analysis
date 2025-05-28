@@ -12,9 +12,9 @@
 | 🎭 Event Venues, Tourist Attractions       | OSM + [DOT Philippines Tourism Site](https://beta.tourism.gov.ph/)                 | Tags: `tourism=attraction`, `amenity=place_of_worship`, `leisure=*`, `historic=*` |
 | ⛪ **Places of Worship**                  | OSM                                                                                 | Use tag: `amenity=place_of_worship`; optionally filter by religion (e.g., `religion=christian`) |
 
-🍽️ Heuristics for Food Business Location Scoring (300m Radius)
+🍽️ Heuristics for Food Business Location Scoring (200m Radius)
 
-| **Indicator**                     | **Adjusted Threshold (300m)**            | **Why It Matters** |
+| **Indicator**                     | **Adjusted Threshold (200m)**            | **Why It Matters** |
 |----------------------------------|------------------------------------------|--------------------|
 | **Restaurants & Cafes**          | ≥ 4 POIs                                  | Indicates demand clustering; food hubs attract more diners. |
 | **Shops / Retail POIs**          | ≥ 8 POIs                                  | Retail zones have consistent footfall and service workers. |

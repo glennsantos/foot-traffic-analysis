@@ -19,16 +19,18 @@ class LocationViabilityReportGenerator:
         
         # Criteria for scoring indicators
         self.criteria = {
-            'restaurants_and_cafes': {'threshold': 4, 'weight': 0.15, 'description': 'Food establishments attract consistent foot traffic'},
-            'shops': {'threshold': 8, 'weight': 0.20, 'description': 'Retail establishments are primary foot traffic generators'},
-            'intersection_count': {'threshold': 20, 'weight': 0.15, 'description': 'Road intersections indicate pedestrian movement'},
-            'schools_universities': {'threshold': 1, 'weight': 0.10, 'description': 'Educational institutions bring regular crowds'},
-            'hospitals_clinics': {'threshold': 1, 'weight': 0.08, 'description': 'Healthcare facilities ensure steady visitor flow'},
-            'bus_stops': {'threshold': 2, 'weight': 0.12, 'description': 'Public transport hubs concentrate pedestrians'},
-            'pedestrian_crossings': {'threshold': 3, 'weight': 0.08, 'description': 'Pedestrian infrastructure indicates walkability'},
-            'markets': {'threshold': 1, 'weight': 0.07, 'description': 'Markets create concentrated commercial activity'},
-            'tourist_sites': {'threshold': 1, 'weight': 0.03, 'description': 'Tourist attractions bring occasional crowds'},
-            'places_of_worship': {'threshold': 1, 'weight': 0.02, 'description': 'Religious sites generate periodic gatherings'}
+            'restaurants_and_cafes': {'threshold': 4, 'weight': 0.13, 'description': 'Food establishments attract consistent foot traffic'},
+            'shops': {'threshold': 8, 'weight': 0.17, 'description': 'Retail establishments are primary foot traffic generators'},
+            'intersection_count': {'threshold': 20, 'weight': 0.12, 'description': 'Road intersections indicate pedestrian movement'},
+            'office_buildings': {'threshold': 3, 'weight': 0.10, 'description': 'Office buildings generate strong B2B lunch crowd traffic'},
+            'schools_universities': {'threshold': 1, 'weight': 0.09, 'description': 'Educational institutions bring regular crowds'},
+            'bus_stops': {'threshold': 2, 'weight': 0.10, 'description': 'Public transport hubs concentrate pedestrians'},
+            'hospitals_clinics': {'threshold': 1, 'weight': 0.07, 'description': 'Healthcare facilities ensure steady visitor flow'},
+            'parking_lots': {'threshold': 1, 'weight': 0.07, 'description': 'Parking facilities boost drive-in accessibility'},
+            'pedestrian_crossings': {'threshold': 3, 'weight': 0.07, 'description': 'Pedestrian infrastructure indicates walkability'},
+            'markets': {'threshold': 1, 'weight': 0.06, 'description': 'Markets create concentrated commercial activity'},
+            'tourist_sites': {'threshold': 1, 'weight': 0.01, 'description': 'Tourist attractions bring occasional crowds'},
+            'places_of_worship': {'threshold': 1, 'weight': 0.01, 'description': 'Religious sites generate periodic gatherings'}
         }
     
     def setup_custom_styles(self):
