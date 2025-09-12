@@ -3,30 +3,93 @@ import pandas as pd
 import json
 import traceback
 import time
+import os
 import requests
 
-# Configure OSMnx with more robust settings
-ox.settings.timeout = 300  # Increase timeout to 5 minutes
-ox.settings.max_query_area_size = 50_000  # Increase max query area size
-ox.settings.memory = 1024 * 1024 * 1024  # 1GB memory limit
+"""OSM data extraction and analysis utilities."""
 
-# List of alternative Overpass endpoints
-OVERPASS_ENDPOINTS = [
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass-api.de/api/interpreter", 
-    "https://overpass.nchc.org.tw/api/interpreter"
+# Configure OSMnx with more robust settings (v1 compatible, v2-ready)
+try:
+    # Prefer new names when available (silence deprecation warnings)
+    if hasattr(ox.settings, "requests_timeout"):
+        ox.settings.requests_timeout = 300
+    else:
+        ox.settings.timeout = 300  # fallback for older versions
+except Exception:
+    pass
+
+ox.settings.max_query_area_size = 50_000  # Increase max query area size
+try:
+    # Prefer new name, fallback for v1
+    if hasattr(ox.settings, "overpass_memory"):
+        ox.settings.overpass_memory = 1024 * 1024 * 1024  # 1GB
+    else:
+        ox.settings.memory = 1024 * 1024 * 1024  # v1
+except Exception:
+    pass
+
+# Use local cache to reduce calls
+ox.settings.use_cache = True
+ox.settings.cache_folder = 'cache'
+
+# Avoid calling Overpass status (prevents UnboundLocalError in some environments)
+ox.settings.overpass_rate_limit = False
+
+def _parse_overpass_endpoints_from_env():
+    env_value = os.getenv("OVERPASS_ENDPOINTS", "").strip()
+    if not env_value:
+        return None
+    endpoints = [e.strip() for e in env_value.split(",") if e.strip()]
+    return endpoints or None
+
+# List of alternative Overpass endpoints (safe defaults)
+# Prefer base form to suit OSMnx v1; v2 gets normalized to full /interpreter
+OVERPASS_ENDPOINTS = _parse_overpass_endpoints_from_env() or [
+    "https://overpass.kumi.systems/api",
+    "https://overpass-api.de/api",
 ]
 
-def test_overpass_endpoint(endpoint):
-    """Test if an Overpass endpoint is accessible"""
+def _status_url_for(endpoint: str) -> str:
+    # Convert .../api/interpreter -> .../api/status
+    if endpoint.endswith("/interpreter"):
+        return endpoint.rsplit("/", 1)[0] + "/status"
+    # Fallback: append status
+    return endpoint.rstrip("/") + "/status"
+
+def _normalize_overpass_urls(endpoint: str):
+    """Return a tuple (v1_base_endpoint, v2_full_interpreter_url).
+
+    - v1 expects base like https://host/api
+    - v2 expects full like https://host/api/interpreter
+    Accept either form as input and normalize.
+    """
+    s = (endpoint or "").strip().rstrip("/")
+    if not s:
+        return s, s
+    if s.endswith("/interpreter"):
+        base = s.rsplit("/", 1)[0]
+        url = s
+    else:
+        base = s
+        url = s + "/interpreter"
+    return base, url
+
+def test_overpass_endpoint(endpoint: str) -> bool:
+    """Test if an Overpass endpoint is accessible via its status URL."""
     try:
-        response = requests.get(endpoint, timeout=10)
-        return response.status_code == 200
-    except:
+        status_url = _status_url_for(endpoint)
+        response = requests.get(status_url, timeout=10)
+        return 200 <= response.status_code < 400
+    except Exception:
         return False
 
 def get_working_endpoint():
-    """Find a working Overpass endpoint"""
+    """Find a working Overpass endpoint (env override respected)."""
+    env_url = os.getenv("OVERPASS_URL", "").strip()
+    if env_url:
+        print(f"Using OVERPASS_URL from environment: {env_url}")
+        return env_url
+
     for endpoint in OVERPASS_ENDPOINTS:
         print(f"Testing endpoint: {endpoint}")
         if test_overpass_endpoint(endpoint):
@@ -34,18 +97,22 @@ def get_working_endpoint():
             return endpoint
         else:
             print(f"✗ Endpoint failed: {endpoint}")
-    
-    # If no endpoint works, return the default and let OSMnx handle it
-    print("⚠ No endpoints responding, using default")
+
+    # If no endpoint appears responsive, use the first and let OSMnx try
+    print("⚠ No endpoints responding, using default candidate")
     return OVERPASS_ENDPOINTS[0]
 
 def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
     try:
         print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
         
-        # Find a working endpoint before starting
+        # Find a working endpoint before starting and normalize for v1/v2
         working_endpoint = get_working_endpoint()
-        ox.settings.overpass_endpoint = working_endpoint
+        v1_base, v2_full = _normalize_overpass_urls(working_endpoint)
+        # Set for both v1 and v2 naming
+        ox.settings.overpass_endpoint = v1_base
+        if hasattr(ox.settings, "overpass_url"):
+            ox.settings.overpass_url = v2_full
         
         location_point = (lat, lon)
 
@@ -78,11 +145,18 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
                 print(f"✗ Attempt {attempt + 1} failed: {str(e)}")
                 
                 if attempt == max_retries - 1:  # Last attempt
-                    raise Exception(f"Failed to fetch data after {max_retries} attempts. Last error: {str(e)}")
+                    raise Exception(
+                        "Failed to fetch OSM data after retries. "
+                        "This often indicates network/DNS issues reaching the Overpass API. "
+                        f"Last error: {str(e)}"
+                    )
                 
                 # Try next endpoint
                 next_endpoint = OVERPASS_ENDPOINTS[(attempt + 1) % len(OVERPASS_ENDPOINTS)]
-                ox.settings.overpass_endpoint = next_endpoint
+                v1_base, v2_full = _normalize_overpass_urls(next_endpoint)
+                ox.settings.overpass_endpoint = v1_base
+                if hasattr(ox.settings, "overpass_url"):
+                    ox.settings.overpass_url = v2_full
                 
                 wait_time = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
                 print(f"Waiting {wait_time} seconds before retry with endpoint: {next_endpoint}")

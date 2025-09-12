@@ -1,103 +1,118 @@
 # Foot Traffic Analysis Tool
 
-A web-based application for analyzing foot traffic indicators in specific locations using OpenStreetMap data. The tool provides comprehensive analysis of various factors that contribute to pedestrian activity and generates detailed viability reports.
+Web app for analyzing foot traffic indicators around any point using OpenStreetMap (OSM) data, with automatic PDF viability reports.
+
+## Default Run (Docker)
+
+1) Copy env and set your contact email (recommended for Nominatim reliability):
+   ```bash
+   cp .env.example .env
+   # edit .env and set NOMINATIM_EMAIL=you@example.com
+   ```
+2) Start the app:
+   ```bash
+   docker compose up --build
+   ```
+3) Open http://localhost:1010
 
 ## Features
 
-- **Interactive Map Interface**: Click on any location or search for addresses
-- **Comprehensive Analysis**: Analyzes 12 foot traffic indicators including:
-  - Restaurants and cafes
-  - Retail shops
-  - Schools and universities
-  - Healthcare facilities
-  - Public transportation
-  - Markets and commercial areas
-  - Tourist attractions
-  - Places of worship
-  - Pedestrian infrastructure
-  - Road intersections
-  - Office buildings
-  - Parking facilities
+- Interactive map and global search (Leaflet + Nominatim)
+- 12 indicators with weighted scoring and clear viability rating
+- Detailed PDF report with executive summary and places tables
+- Resilient Overpass endpoint selection and OSMnx caching
+- JSON persistence, logging, and a health check endpoint
 
-- **Viability Scoring**: Intelligent scoring system that ranks locations from "Excellent" to "Poor"
-- **PDF Reports**: Automatically generated detailed reports with:
-  - Executive summary
-  - Viability score and rating
-  - Indicators ranked by importance
-  - Detailed analysis and recommendations
-  - Business suitability assessment
+## Quickstart
 
-- **Network Resilience**: Multiple API endpoints with automatic failover
-- **Comprehensive Logging**: Detailed logging for troubleshooting
-- **Data Persistence**: Analysis results saved as JSON files
+Docker (recommended):
 
-## Installation
+1) Copy `.env.example` to `.env` and edit as needed (set `NOMINATIM_EMAIL` for better reliability)
 
-1. **Clone the repository**:
+2) Build and run:
    ```bash
-   git clone <repository-url>
-   cd foot-traffic-analysis
+   docker compose up --build
    ```
 
-2. **Install dependencies**:
+3) Open http://localhost:1010
+
+Python environment:
+
+1) Install deps
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run the application**:
+2) Set env (optional)
+   ```bash
+   export PORT=1010
+   export SECRET_KEY=change-me
+   export NOMINATIM_EMAIL=you@example.com
+   export ALLOWED_ORIGINS=*
+   ```
+
+3) Run
    ```bash
    python3 app.py
    ```
 
-4. **Access the application**:
-   Open your browser and navigate to `http://localhost:10101`
+4) Open http://localhost:1010
 
-## Usage
+## Configuration
 
-1. **Select a Location**:
-   - Click anywhere on the map to place a marker, OR
-   - Use the search box to find a specific address
+- `PORT`: HTTP port (default `1010`)
+- `SECRET_KEY`: Flask secret key (set in production)
+- `ALLOWED_ORIGINS`: CORS origins, comma-separated (default `*` for dev)
+- `NOMINATIM_EMAIL`: Contact email included in User-Agent for Nominatim requests (recommended)
+  - Reverse geocoding includes it in headers; the search box appends it as a query parameter if set.
+- `OVERPASS_URL`: Force a specific Overpass endpoint. Accepts either base (`https://.../api`) or full (`https://.../api/interpreter`) — the app normalizes per OSMnx version.
+- `OVERPASS_ENDPOINTS`: Comma-separated list of endpoints to try (left-to-right). Accepts base or full forms; defaults are `https://overpass.kumi.systems/api,https://overpass-api.de/api`.
 
-2. **Adjust Analysis Radius** (optional):
-   - Default: 300 meters
-   - Range: 100-2000 meters
+## Using the App
 
-3. **Start Analysis**:
-   - Click on the pin
-   - Confirm when prompted
-   - Wait for analysis to complete (1-5 minutes)
+- Click on the map or use the search box to select a location
+- Adjust radius (100–2000 m; default 300 m)
+- Click the marker to start analysis (1–5 minutes typical)
+- View indicators, viability summary, and download the PDF report
 
-4. **View Results**:
-   - **Viability Summary**: Overall score and rating
-   - **Detailed Indicators**: Table with all metrics
-   - **PDF Report**: Download comprehensive analysis report
-   - **Raw Data**: JSON file with complete analysis
+## Viability Ratings
 
-## Understanding the Results
+- Best (98%+): Ideal for premium retail and flagship stores
+- Outstanding (95–97%): Exceptional foot traffic potential
+- Excellent (85–94%): Highly suitable for foot traffic-dependent businesses
+- Good (80–89%): Suitable for most commercial activities
+- Moderate (70–79%): Requires careful business planning
+- Poor (<70%): Limited foot traffic potential
 
-### Viability Ratings
-- **Best (98%+)**: Ideal for premium retail and flagship stores
-- **Outstanding (95-97%)**: Exceptional foot traffic potential
-- **Excellent (85-94%)**: Highly suitable for foot traffic-dependent businesses
-- **Good (80-89%)**: Suitable for most commercial activities
-- **Moderate (70-79%)**: Requires careful business planning
-- **Poor (<70%)**: Limited foot traffic potential
+## Packaging To Sell the Code
 
-### Key Indicators
-The analysis evaluates locations based on weighted criteria:
-- **Shops** (17% weight): Primary foot traffic generators
-- **Restaurants/Cafes** (13% weight): Consistent visitor attraction
-- **Intersections** (12% weight): Pedestrian movement indicators
-- **Office Buildings** (10% weight): Strong B2B lunch crowd drivers
-- **Transport Hubs** (10% weight): Commuter foot traffic
-- **Schools** (9% weight): Regular crowd generation
-- **Healthcare** (7% weight): Steady visitor flow
-- **Parking Lots** (7% weight): Drive-in accessibility boosters
-- **Pedestrian Infrastructure** (7% weight): Walkability indicators
-- **Markets** (6% weight): Commercial activity concentration
-- **Tourist Sites** (1% weight): Occasional visitor attraction
-- **Places of Worship** (1% weight): Periodic gatherings
+- Include `EULA.md` (update with your company/jurisdiction).
+- Include `ATTRIBUTION.md` and `THIRD_PARTY_NOTICES.md` with deliveries.
+- Distribute source or a Docker image; Dockerfile runs Gunicorn in production.
+- Remove any local `venv/` and cached artifacts before packaging the repo.
 
-## File Structure
+### Create a ZIP package
 
-```
+- Using Makefile:
+  ```bash
+  make package
+  # output in dist/foot-traffic-analysis_YYYYMMDD_HHMMSS.zip
+  ```
+- Or run directly:
+  ```bash
+  python3 scripts/package.py
+  ```
+
+## Attribution
+
+- Data © OpenStreetMap contributors. See `ATTRIBUTION.md`.
+- This tool uses OSMnx, Overpass API, Flask, and ReportLab.
+
+## Troubleshooting
+
+- Slow or failed analyses: Overpass can be rate-limited. Try again later or reduce radius. Caching is enabled (`cache/`).
+- Reverse geocoding: Set `NOMINATIM_EMAIL` to comply with usage policy.
+- CORS: Restrict `ALLOWED_ORIGINS` in production.
+ - Gunicorn worker timeout or OSMnx `UnboundLocalError` during Overpass status check: the app disables OSMnx's `overpass_rate_limit` to avoid status probes that can fail under strict networks. You can also set `OVERPASS_URL` to a reachable mirror.
+ - Connection refused to `.../api/interpreter/interpreter`: this indicates a doubled `interpreter` path. The app now normalizes endpoints for OSMnx v1/v2; ensure your `OVERPASS_URL`/`OVERPASS_ENDPOINTS` are either base (`.../api`) or full (`.../api/interpreter`).
+- Matplotlib cache permission errors inside Docker: the image sets `MPLCONFIGDIR=/app/.matplotlib_cache` and creates the directory with write perms.

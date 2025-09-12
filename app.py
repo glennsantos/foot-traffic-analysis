@@ -9,6 +9,7 @@ import requests
 import traceback
 from functools import wraps
 import logging
+from urllib.parse import quote
 
 # Configure logging
 logging.basicConfig(
@@ -22,18 +23,60 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-app.secret_key = os.urandom(24)  # Required for session
+
+# Configure CORS from environment (default open for dev)
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if allowed_origins == "*":
+    CORS(app)
+else:
+    CORS(app, resources={r"/*": {"origins": [o.strip() for o in allowed_origins.split(",") if o.strip()]}})
+
+# Secret key from env (fallback random for local dev)
+app.secret_key = os.getenv("SECRET_KEY") or os.urandom(24)
 
 logger.info("Flask application starting up...")
 
 # Simple in-memory storage for demo (replace with a database in production)
 last_searches = {}
 
+def nominatim_headers():
+    """Build headers for Nominatim requests per usage policy."""
+    contact = os.getenv("NOMINATIM_EMAIL", "")
+    ua = f"FootTrafficAnalysis/1.0 ({contact})" if contact else "FootTrafficAnalysis/1.0"
+    return {"User-Agent": ua}
+
 def get_client_ip():
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0]
     return request.remote_addr
+
+def _to_json_safe(obj):
+    """Recursively convert common non-serializable types (e.g., numpy types) to JSON-safe primitives."""
+    try:
+        import numpy as np  # available via pandas dependency
+    except Exception:
+        np = None
+
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_to_json_safe(v) for v in obj]
+    # numpy scalar types
+    if np is not None and isinstance(obj, np.generic):
+        try:
+            return obj.item()
+        except Exception:
+            pass
+    # other objects exposing .item() to get python scalar
+    if hasattr(obj, 'item') and callable(getattr(obj, 'item')):
+        try:
+            return obj.item()
+        except Exception:
+            pass
+    if isinstance(obj, (int, float, bool, str)) or obj is None:
+        return obj
+    # Fallback to string representation
+    return str(obj)
 
 # Create directories if they don't exist
 for directory in ['analyses_new', 'reports']:
@@ -41,10 +84,30 @@ for directory in ['analyses_new', 'reports']:
         os.makedirs(directory, exist_ok=True)
         logger.info(f"Created {directory} directory")
 
+# Global error handler to ensure JSON responses for API consumers
+@app.errorhandler(500)
+def handle_internal_error(e):
+    logger.error("Unhandled server error", exc_info=True)
+    try:
+        # Prefer JSON if client accepts it
+        if request.accept_mimetypes and request.accept_mimetypes.accept_json:
+            return jsonify({'error': 'Internal server error'}), 500
+    except Exception:
+        pass
+    return "Internal server error", 500
+
 def get_location_name(lat, lon):
     try:
         logger.info(f"Fetching location name for coordinates: {lat}, {lon}")
-        response = requests.get(f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json")
+        email = os.getenv('NOMINATIM_EMAIL', '')
+        url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+        if email:
+            url += f"&email={quote(email)}"
+        response = requests.get(
+            url,
+            headers=nominatim_headers(),
+            timeout=20,
+        )
         data = response.json()
         road = data.get('address', {}).get('road', '')
         suburb = data.get('address', {}).get('suburb', '')
@@ -59,7 +122,7 @@ def get_location_name(lat, lon):
 @app.route('/')
 def index():
     logger.info(f"Index page requested from {get_client_ip()}")
-    return render_template('index.html')
+    return render_template('index.html', nominatim_email=os.getenv('NOMINATIM_EMAIL', ''))
 
 @app.route('/api/last-search', methods=['GET'])
 def get_last_search():
@@ -81,10 +144,25 @@ def get_last_search():
         logger.error(f"Error in get_last_search: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    """Simple health check endpoint."""
+    try:
+        return jsonify({
+            'status': 'ok',
+            'last_search_count': len(last_searches),
+            'time': datetime.now().isoformat()
+        }), 200
+    except Exception:
+        return jsonify({'status': 'error'}), 500
+
 @app.route('/download-report/<filename>')
 def download_report(filename):
     """Download PDF report"""
     try:
+        # Prevent directory traversal
+        if os.path.basename(filename) != filename:
+            return jsonify({'error': 'Invalid filename'}), 400
         report_path = os.path.join('reports', filename)
         if os.path.exists(report_path):
             logger.info(f"Serving report download: {filename}")
@@ -190,6 +268,7 @@ def analyze():
         response_data = analysis_data.copy()
         response_data['lat'] = lat
         response_data['lon'] = lon
+        response_data = _to_json_safe(response_data)
         
         logger.info(f"Returning response with keys: {list(response_data.keys())}")
         logger.info("=== ANALYSIS REQUEST SUCCESS ===")
@@ -202,5 +281,7 @@ def analyze():
         return jsonify({'error': error_msg}), 400
 
 if __name__ == '__main__':
-    logger.info("Starting Flask development server on port 10101...")
-    app.run(debug=True, host='0.0.0.0', port=10101) 
+    port = int(os.getenv('PORT', '1010'))
+    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    logger.info(f"Starting Flask server on port {port} (debug={debug})...")
+    app.run(debug=debug, host='0.0.0.0', port=port) 

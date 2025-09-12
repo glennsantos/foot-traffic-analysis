@@ -12,6 +12,7 @@ reports/
 # Environment and IDE files
 .env
 .venv/
+venv/
 .idea/
 .vscode/
 *.swp
@@ -26,3 +27,4 @@ app.log
 
 .gitignore
 
+dist/

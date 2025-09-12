@@ -2,6 +2,29 @@
 
 All notable changes to the Foot Traffic Analysis application will be documented in this file.
 
+## [2025-09-12] - Packaging, Compliance, and Production Hardening
+
+### Added
+- `.env.example` for environment configuration (PORT, SECRET_KEY, ALLOWED_ORIGINS, NOMINATIM_EMAIL)
+- `ATTRIBUTION.md`, `THIRD_PARTY_NOTICES.md`, and `EULA.md` template for direct code sale
+- `/healthz` endpoint for simple health checks
+- `scripts/package.py` and `Makefile` target `make package` to produce a clean distributable ZIP in `dist/`
+- `VERSION` file and versioned package naming
+
+### Changed
+- Standardized default port to `1010` across app, Docker, and README
+- Switched Docker runtime to Gunicorn for production serving
+- Enabled OSMnx caching (`cache/`) and made Overpass usage more resilient
+- Nominatim usage compliance: proper User-Agent headers and optional `email` in search requests
+- UI and PDF now include OpenStreetMap attribution
+
+### Security/Hardening
+- CORS is configurable via `ALLOWED_ORIGINS`; `SECRET_KEY` now read from env
+- Download endpoint validates filename to prevent traversal
+
+### Notes
+- Local `venv/`, caches, and reports are excluded from packages via `.dockerignore` and packaging script
+
 ## [2025-05-28] - Enhanced Place Name Extraction Fix
 
 ### Fixed

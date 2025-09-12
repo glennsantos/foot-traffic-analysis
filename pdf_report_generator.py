@@ -374,7 +374,10 @@ class LocationViabilityReportGenerator:
         
         # Footer
         story.append(Spacer(1, 30))
-        footer_text = f"Report generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}"
+        footer_text = (
+            f"Report generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')} | "
+            f"Data © OpenStreetMap contributors | Built with OSMnx, Overpass API, and ReportLab"
+        )
         footer_style = ParagraphStyle('Footer', parent=self.styles['Normal'], 
                                     fontSize=10, alignment=TA_CENTER, textColor=colors.grey)
         story.append(Paragraph(footer_text, footer_style))

@@ -4,6 +4,10 @@
     <title>Foot Traffic Analysis</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Injected from server env for Nominatim policy compliance
+        window.NOMINATIM_EMAIL = "{{ nominatim_email }}";
+    </script>
     <style>
         body {
             margin: 0;
@@ -307,7 +311,7 @@
             // Add OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: 'OpenStreetMap contributors'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             
             // Initialize map click handler
@@ -418,7 +422,10 @@
 
                     searchTimeout = setTimeout(async () => {
                         try {
-                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph`);
+                            const emailParam = (window.NOMINATIM_EMAIL && window.NOMINATIM_EMAIL.trim().length > 0)
+                                ? `&email=${encodeURIComponent(window.NOMINATIM_EMAIL.trim())}`
+                                : '';
+                            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5${emailParam}`);
                             const results = await response.json();
                             
                             searchResults.innerHTML = '';
@@ -696,15 +703,29 @@
                     logMessage(`Backend response status: ${response.status} ${response.statusText}`, true);
                     
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        const errorMsg = errorData.error || 'Failed to analyze location';
-                        
+                        let errorMsg = `HTTP ${response.status} ${response.statusText}`;
+                        try {
+                            const errorData = await response.json();
+                            if (errorData && errorData.error) {
+                                errorMsg = errorData.error;
+                            }
+                        } catch (jsonErr) {
+                            try {
+                                const text = await response.text();
+                                if (text) {
+                                    errorMsg = text.slice(0, 500);
+                                }
+                            } catch (_) {
+                                // ignore
+                            }
+                        }
+
                         // Check if it's a network-related error
-                        if (errorMsg.includes('overpass') || errorMsg.includes('connection') || errorMsg.includes('timeout')) {
+                        if (errorMsg.toLowerCase().includes('overpass') || errorMsg.toLowerCase().includes('connection') || errorMsg.toLowerCase().includes('timeout')) {
                             logMessage('Network/API issue detected. The OpenStreetMap servers may be temporarily unavailable.', true, true);
                             logMessage('Please try again in a few minutes.', true, true);
                         }
-                        
+
                         logMessage(`Backend error: ${errorMsg}`, true, true);
                         throw new Error(errorMsg);
                     }
@@ -1029,5 +1050,8 @@
             }
         </script>
     </div>
+    <div style="padding: 8px 20px; color: #666; font-size: 12px;">
+        Data © OpenStreetMap contributors
+    </div>
 </body>
-</html> 
+</html>
