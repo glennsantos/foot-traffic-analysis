@@ -1,0 +1,44 @@
+# Coverage configuration for Foot Traffic Analysis Tool
+
+[run]
+source = .
+omit =
+    */tests/*
+    */venv/*
+    */env/*
+    */.venv/*
+    */cache/*
+    */analyses_new/*
+    */reports/*
+    */scripts/package.py
+    setup.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run:
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @abstractmethod
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

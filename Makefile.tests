@@ -1,0 +1,80 @@
+# Makefile for testing Foot Traffic Analysis Tool
+# Use this for all test-related commands
+
+.PHONY: help test test-unit test-integration test-coverage test-quick test-verbose clean-test install-test
+
+help:
+	@echo "Testing Commands for Foot Traffic Analysis Tool"
+	@echo "================================================"
+	@echo ""
+	@echo "make test              - Run all tests with coverage"
+	@echo "make test-unit         - Run only unit tests"
+	@echo "make test-integration  - Run only integration tests"
+	@echo "make test-quick        - Run tests without coverage (faster)"
+	@echo "make test-verbose      - Run tests with verbose output"
+	@echo "make test-coverage     - Generate coverage report"
+	@echo "make install-test      - Install test dependencies"
+	@echo "make clean-test        - Clean test artifacts and cache"
+	@echo ""
+
+# Install test dependencies
+install-test:
+	pip install -r requirements-dev.txt
+
+# Run all tests with coverage
+test:
+	pytest tests/ --cov=. --cov-report=html --cov-report=term-missing
+
+# Run only unit tests
+test-unit:
+	pytest tests/ -m "not integration" -v
+
+# Run only integration tests
+test-integration:
+	pytest tests/test_integration.py -v
+
+# Run tests quickly without coverage
+test-quick:
+	pytest tests/ -v --no-cov
+
+# Run tests with extra verbose output
+test-verbose:
+	pytest tests/ -vv --tb=long
+
+# Generate coverage report
+test-coverage:
+	pytest tests/ --cov=. --cov-report=html --cov-report=term
+	@echo ""
+	@echo "Coverage report generated in htmlcov/index.html"
+
+# Run specific test file
+test-file:
+	@echo "Usage: make test-file FILE=tests/test_app.py"
+	pytest $(FILE) -v
+
+# Run tests matching a pattern
+test-pattern:
+	@echo "Usage: make test-pattern PATTERN=test_analyze"
+	pytest tests/ -k $(PATTERN) -v
+
+# Clean test artifacts
+clean-test:
+	rm -rf .pytest_cache
+	rm -rf htmlcov
+	rm -rf .coverage
+	rm -rf coverage.xml
+	rm -rf tests/__pycache__
+	rm -rf **/__pycache__
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	@echo "Test artifacts cleaned"
+
+# Watch mode - run tests on file changes (requires pytest-watch)
+watch:
+	ptw tests/ -- --tb=short
+
+# Generate test report
+test-report:
+	pytest tests/ --html=test-report.html --self-contained-html
+	@echo "Test report generated: test-report.html"
