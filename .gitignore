@@ -25,6 +25,11 @@ reports/viability_report_20250528_094740_unknown_location_300m.pdf
 reports/viability_report_20250528_095916_unknown_location_300m.pdf
 app.log
 
-.gitignore
-
 dist/
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+test-report.html
