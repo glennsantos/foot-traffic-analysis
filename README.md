@@ -67,6 +67,27 @@ Python environment:
   - Reverse geocoding includes it in headers; the search box appends it as a query parameter if set.
 - `OVERPASS_URL`: Force a specific Overpass endpoint. Accepts either base (`https://.../api`) or full (`https://.../api/interpreter`) — the app normalizes per OSMnx version.
 - `OVERPASS_ENDPOINTS`: Comma-separated list of endpoints to try (left-to-right). Accepts base or full forms; defaults are `https://overpass.kumi.systems/api,https://overpass-api.de/api`.
+- `GOOGLE_MAPS_API_KEY`: One supported credential for `POST /api/places-insights`. Enable billing and the Places Aggregate API in the Google Cloud project that owns this key. Google's current API reference documents the `cloud-platform` OAuth scope; `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN` can be used instead for OAuth/service-account authentication.
+- `PLACES_INSIGHTS_CACHE_TTL_SECONDS`: In-memory Google-count cache duration, default `900`. This lowers repeated-call latency and billable requests; it is per-process and should not be treated as a distributed cache.
+- `PLACES_INSIGHTS_CACHE_MAX_ENTRIES`: Maximum cached count queries per process, default `512`; oldest entries are evicted when full.
+
+## Places Insights site-screening API
+
+`POST /api/places-insights` returns live Google aggregate place counts for franchise site screening without pretending that POI counts are measured pedestrian traffic. The legacy `/analyze` endpoint remains unchanged.
+
+```json
+{
+  "location": {"latitude": 14.5995, "longitude": 120.9842},
+  "radius_meters": 500,
+  "place_type": "restaurant"
+}
+```
+
+It accepts legacy `lat`/`lon` and `radius` aliases. Radius is 40–50,000 m. `place_type` is deliberately limited to this verified franchise-oriented set: `bakery`, `bar`, `cafe`, `car_wash`, `clothing_store`, `convenience_store`, `dentist`, `drugstore`, `gas_station`, `grocery_store`, `gym`, `hair_salon`, `hotel`, `laundry`, `pharmacy`, `pet_store`, `restaurant`, `shopping_mall`, `spa`, and `supermarket`; `coffee_shop`, `fast_food`, `fitness_center`, `quick_service_restaurant`, and `qsr` are mapped to their supported equivalents.
+
+The response contains separate, non-additive counts for demand generators, direct competitors (Google primary type only), and supporting categories that exclude the selected competitor type. It deliberately has no automated GO/NO-GO recommendation. It includes caveats and concrete evidence to collect before a site decision. `radius_meters` must be an integer; decimal values are rejected rather than rounded.
+
+Live data failures are structured and truthful: missing credentials return `503` with `error.code: "places_insights_not_configured"`, rejected credentials/requests return non-retryable `502` errors, and only network/rate-limit/5xx failures are retryable `503` responses with `retry_after_seconds`. The endpoint accepts either `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN`, or both; the API never substitutes demo data for a live result.
 
 ## Using the App
 
