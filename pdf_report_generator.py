@@ -1,5 +1,5 @@
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -11,6 +11,8 @@ import io
 import base64
 from datetime import datetime
 import os
+from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 
 class LocationViabilityReportGenerator:
     def __init__(self):
@@ -34,38 +36,71 @@ class LocationViabilityReportGenerator:
         }
     
     def setup_custom_styles(self):
+        self.ink = colors.HexColor('#172c3b')
+        self.teal = colors.HexColor('#087f73')
+        self.muted = colors.HexColor('#596c79')
+        self.line = colors.HexColor('#dce5e7')
+        self.content_width = A4[0] - 88
+        self.styles['Normal'].fontSize = 9
+        self.styles['Normal'].leading = 14
+        self.styles['Normal'].textColor = self.ink
+        self.styles['Heading3'].textColor = self.ink
+        self.styles['Heading3'].fontSize = 12
+        self.styles['Heading3'].leading = 16
+        self.styles['Heading3'].spaceBefore = 12
+        self.styles['Heading3'].spaceAfter = 8
         self.title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=self.styles['Heading1'],
-            fontSize=24,
-            spaceAfter=30,
-            alignment=TA_CENTER,
-            textColor=colors.darkblue
-        )
-        
+            'CustomTitle', parent=self.styles['Heading1'], fontSize=28,
+            leading=33, spaceAfter=12, textColor=self.ink)
         self.heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=self.styles['Heading2'],
-            fontSize=16,
-            spaceAfter=12,
-            textColor=colors.darkblue
-        )
-        
+            'CustomHeading', parent=self.styles['Heading2'], fontSize=17,
+            leading=22, spaceBefore=12, spaceAfter=12, textColor=self.ink)
         self.summary_style = ParagraphStyle(
-            'Summary',
-            parent=self.styles['Normal'],
-            fontSize=12,
-            spaceAfter=12,
-            alignment=TA_JUSTIFY,
-            backColor=colors.lightgrey,
-            borderColor=colors.darkblue,
-            borderWidth=1,
-            leftIndent=10,
-            rightIndent=10,
-            topPadding=10,
-            bottomPadding=10
-        )
-    
+            'Summary', parent=self.styles['Normal'], fontSize=10, leading=16,
+            spaceAfter=12, textColor=self.ink)
+        self.cell_style = ParagraphStyle(
+            'TableCell', parent=self.styles['Normal'], fontSize=8, leading=11)
+        self.cell_header_style = ParagraphStyle(
+            'TableHeader', parent=self.cell_style, textColor=colors.white,
+            fontName='Helvetica-Bold')
+
+    def styled_table(self, data, widths):
+        rows = [[Paragraph(escape(str(cell)), self.cell_header_style if i == 0
+                           else self.cell_style) for cell in row]
+                for i, row in enumerate(data)]
+        table = Table(rows, colWidths=widths, repeatRows=1, hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.ink),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1),
+             [colors.white, colors.HexColor('#f3f6f6')]),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, self.teal),
+            ('LINEBELOW', (0, 1), (-1, -1), 0.4, self.line),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 9),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ]))
+        return table
+
+    def draw_page(self, canvas, doc):
+        canvas.saveState()
+        width, height = A4
+        canvas.setStrokeColor(self.teal)
+        canvas.setLineWidth(2)
+        canvas.line(44, height - 32, width - 44, height - 32)
+        canvas.setFont('Helvetica-Bold', 8)
+        canvas.setFillColor(self.ink)
+        canvas.drawString(44, height - 24, 'RETAIL LOCATION / SITE SCREENING')
+        canvas.setStrokeColor(self.line)
+        canvas.setLineWidth(0.5)
+        canvas.line(44, 39, width - 44, 39)
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(self.muted)
+        canvas.drawString(44, 26, 'Data (c) OpenStreetMap contributors | Verify conditions on site')
+        canvas.drawRightString(width - 44, 26, f'{doc.page}')
+        canvas.restoreState()
+
     def calculate_indicator_scores(self, analysis_data):
         """Calculate scores for each indicator and rank them"""
         scores = []
@@ -158,7 +193,7 @@ class LocationViabilityReportGenerator:
         summary = f"""
         <b>EXECUTIVE SUMMARY</b><br/><br/>
         
-        Location: {location_name}<br/>
+        Location: {escape(str(location_name))}<br/>
         Coordinates: {lat:.4f}, {lon:.4f}<br/>
         Analysis Radius: {radius}m<br/>
         Overall Viability: <b>{viability_percentage:.1f}% ({rating})</b><br/>
@@ -180,78 +215,33 @@ class LocationViabilityReportGenerator:
         return summary
     
     def create_indicators_table(self, scores):
-        """Create detailed indicators table"""
-        data = [['Rank', 'Indicator', 'Count', 'Threshold', 'Score', 'Status']]
-        
+        """Create a ranked indicator table within the printable page width."""
+        data = [['Rank', 'Indicator', 'Count', 'Target', 'Score', 'Status']]
         for i, score in enumerate(scores, 1):
-            status = "✓ Met" if score['meets_criteria'] else "✗ Not Met"
-            status_color = colors.green if score['meets_criteria'] else colors.red
-            
-            data.append([
-                str(i),
-                self.format_indicator_name(score['indicator']),
-                str(score['count']),
-                str(score['threshold']),
-                f"{score['base_score']:.1f}%",
-                status
-            ])
-        
-        table = Table(data, colWidths=[0.5*inch, 2.5*inch, 0.8*inch, 0.8*inch, 0.8*inch, 1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-        ]))
-        
-        return table
-    
+            data.append([str(i), self.format_indicator_name(score['indicator']),
+                         str(score['count']), str(score['threshold']),
+                         f"{score['base_score']:.1f}%",
+                         'Met' if score['meets_criteria'] else 'Below target'])
+        return self.styled_table(data, [42, self.content_width - 256, 43, 43, 56, 72])
+
     def create_places_table(self, indicator_name, places_data):
-        """Create detailed places table with name, coordinates, and address"""
-        if not places_data or len(places_data) == 0:
+        """Keep complete names and addresses readable with wrapped cells."""
+        if not places_data:
             return None
-        
-        # Create table data
         data = [['Name', 'Latitude', 'Longitude', 'Address']]
-        
-        for place in places_data[:20]:  # Limit to first 20 places to avoid overly long tables
-            lat_str = f"{place['latitude']:.6f}" if place['latitude'] is not None else "N/A"
-            lon_str = f"{place['longitude']:.6f}" if place['longitude'] is not None else "N/A"
-            
-            data.append([
-                place['name'][:30] + "..." if len(place['name']) > 30 else place['name'],
-                lat_str,
-                lon_str,
-                place['address'][:40] + "..." if len(place['address']) > 40 else place['address']
-            ])
-        
-        # Create table
-        table = Table(data, colWidths=[2.2*inch, 1.2*inch, 1.2*inch, 2.4*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP')
-        ]))
-        
-        return table
-    
+        for place in places_data[:20]:
+            lat_str = f"{place['latitude']:.6f}" if place.get('latitude') is not None else 'N/A'
+            lon_str = f"{place['longitude']:.6f}" if place.get('longitude') is not None else 'N/A'
+            data.append([place.get('name') or 'Unnamed place', lat_str, lon_str,
+                         place.get('address') or 'Address not mapped'])
+        return self.styled_table(data, [155, 74, 74, self.content_width - 303])
+
     def generate_report(self, analysis_data, location_name, lat, lon, radius, output_path):
         """Generate the complete PDF report"""
-        doc = SimpleDocTemplate(output_path, pagesize=A4)
+        doc = SimpleDocTemplate(
+            output_path, pagesize=A4, leftMargin=44, rightMargin=44,
+            topMargin=54, bottomMargin=56,
+            title=f"Retail location report - {location_name}", author='Retail Location Viability Analyzer')
         story = []
         
         # Calculate scores and viability
@@ -259,23 +249,43 @@ class LocationViabilityReportGenerator:
         viability_percentage, rating, rating_color = self.calculate_overall_viability(scores)
         
         # Title
-        story.append(Paragraph("RETAIL LOCATION VIABILITY ANALYZER", self.title_style))
+        story.append(Paragraph("Retail location report", self.title_style))
         story.append(Spacer(1, 20))
         
-        # Summary section
         summary_text = self.generate_summary(location_name, lat, lon, radius, viability_percentage, rating, scores)
+        story.append(Paragraph(escape(str(location_name)), self.heading_style))
+        story.append(Paragraph(f"{lat:.4f}, {lon:.4f} &nbsp; | &nbsp; {radius} m radius", self.styles['Normal']))
+        story.append(Spacer(1, 18))
+        score_style = ParagraphStyle(
+            'Score', parent=self.styles['Normal'], fontSize=30, leading=36,
+            textColor=colors.white, fontName='Helvetica-Bold')
+        label_style = ParagraphStyle(
+            'ScoreLabel', parent=self.styles['Normal'], fontSize=10,
+            leading=15, textColor=colors.HexColor('#b7efdb'))
+        score_card = Table([[
+            Paragraph(f"{viability_percentage:.1f}%", score_style),
+            Paragraph(f"MODEL VIABILITY SCORE<br/><b>{rating}</b><br/>"
+                      f"{sum(s['meets_criteria'] for s in scores)} of {len(scores)} criteria met", label_style)
+        ]], colWidths=[150, self.content_width - 150])
+        score_card.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), self.ink),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 20),
+            ('TOPPADDING', (0, 0), (-1, -1), 18),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 18),
+        ]))
+        story.append(score_card)
+        story.append(Spacer(1, 14))
+        story.append(Paragraph(
+            "This score summarizes mapped indicators against the app's thresholds. "
+            "It is not a measured pedestrian count or a sales forecast. "
+            "Confirm map entries, pedestrian activity, rent, and site access before deciding.", self.styles['Normal']))
+        story.append(Spacer(1, 16))
         story.append(Paragraph(summary_text, self.summary_style))
-        story.append(Spacer(1, 20))
-        
-        # Overall Score
-        score_text = f"<b>OVERALL VIABILITY SCORE: {viability_percentage:.1f}% ({rating})</b>"
-        score_style = ParagraphStyle('Score', parent=self.styles['Normal'], fontSize=16, 
-                                   alignment=TA_CENTER, textColor=rating_color, spaceAfter=20)
-        story.append(Paragraph(score_text, score_style))
-        story.append(Spacer(1, 20))
-        
+        story.append(PageBreak())
+
         # Detailed Analysis
-        story.append(Paragraph("DETAILED INDICATOR ANALYSIS", self.heading_style))
+        story.append(Paragraph("Indicator comparison", self.heading_style))
         story.append(Paragraph("Indicators ranked from most promising to least promising:", self.styles['Normal']))
         story.append(Spacer(1, 12))
         
@@ -284,12 +294,13 @@ class LocationViabilityReportGenerator:
         story.append(Spacer(1, 20))
         
         # Detailed descriptions
-        story.append(Paragraph("INDICATOR DESCRIPTIONS & ANALYSIS", self.heading_style))
+        story.append(Paragraph("Nearby places and indicator details", self.heading_style))
         
         for i, score in enumerate(scores, 1):
+            section_start = len(story)
             indicator_name = self.format_indicator_name(score['indicator'])
             status_text = "MEETS CRITERIA" if score['meets_criteria'] else "BELOW THRESHOLD"
-            status_color = colors.green if score['meets_criteria'] else colors.red
+            status_color = self.teal if score['meets_criteria'] else colors.HexColor('#965224')
             
             # Indicator header
             header_text = f"<b>{i}. {indicator_name}</b> (Score: {score['base_score']:.1f}%)"
@@ -340,20 +351,7 @@ class LocationViabilityReportGenerator:
                             places_data.append([place_name])
                     
                     if len(places_data) > 1:  # Only create table if we have actual places
-                        simple_table = Table(places_data, colWidths=[6*inch])
-                        simple_table.setStyle(TableStyle([
-                            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                            ('FONTSIZE', (0, 0), (-1, 0), 10),
-                            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-                            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                            ('FONTSIZE', (0, 1), (-1, -1), 9),
-                            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
-                            ('VALIGN', (0, 0), (-1, -1), 'TOP')
-                        ]))
+                        simple_table = self.styled_table(places_data, [self.content_width])
                         story.append(simple_table)
                         
                         if len(score['places']) > 20:
@@ -364,10 +362,12 @@ class LocationViabilityReportGenerator:
                         story.append(Paragraph(f"No specific place names available for this indicator.", self.styles['Normal']))
             
             story.append(Spacer(1, 12))
+            section = story[section_start:]
+            story[section_start:] = [KeepTogether(section)]
         
         # Conclusion
         story.append(PageBreak())
-        story.append(Paragraph("CONCLUSION & RECOMMENDATIONS", self.heading_style))
+        story.append(Paragraph("Assessment and next steps", self.heading_style))
         
         conclusion = self.generate_conclusion(viability_percentage, rating, scores)
         story.append(Paragraph(conclusion, self.styles['Normal']))
@@ -375,15 +375,15 @@ class LocationViabilityReportGenerator:
         # Footer
         story.append(Spacer(1, 30))
         footer_text = (
-            f"Report generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')} | "
-            f"Data © OpenStreetMap contributors | Built with OSMnx, Overpass API, and ReportLab"
+            f"Report generated on {datetime.now(ZoneInfo('Asia/Manila')).strftime('%B %d, %Y at %I:%M %p PHT')} | "
+            f"Data © OpenStreetMap contributors"
         )
         footer_style = ParagraphStyle('Footer', parent=self.styles['Normal'], 
                                     fontSize=10, alignment=TA_CENTER, textColor=colors.grey)
         story.append(Paragraph(footer_text, footer_style))
         
         # Build PDF
-        doc.build(story)
+        doc.build(story, onFirstPage=self.draw_page, onLaterPages=self.draw_page)
         
         return {
             'viability_percentage': viability_percentage,

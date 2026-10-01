@@ -106,8 +106,8 @@ Live data failures are structured and truthful: missing credentials return `503`
 
 - Click on the map or use the search box to select a location
 - Adjust radius (100–2000 m; default 300 m)
-- Click the marker to start analysis (1–5 minutes typical)
-- View indicators, viability summary, and download the PDF report
+- Select Analyze location to start. Elapsed time and site-visit prompts appear while the service works.
+- Review the indicator counts and expandable places lists, then download the matching PDF report. The score is a screening model, not a measured pedestrian count.
 
 ## Viability Ratings
 

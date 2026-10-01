@@ -491,7 +491,7 @@ class TestTableCreation:
         assert len(table._cellvalues) == 21
 
     def test_create_places_table_long_names(self):
-        """Test that long place names are truncated"""
+        """Keep full place names available for wrapping in the report."""
         generator = LocationViabilityReportGenerator()
         long_name = 'A' * 50  # 50 characters
         places_data = [
@@ -501,10 +501,10 @@ class TestTableCreation:
 
         table = generator.create_places_table('Test Places', places_data)
 
-        # Name should be truncated to 30 chars + "..."
+        # Full names should survive the table conversion.
         assert len(table._cellvalues) == 2
         cell_value = table._cellvalues[1][0]
-        assert '...' in cell_value
+        assert cell_value.getPlainText() == long_name
 
 
 class TestPDFReportGeneration:
