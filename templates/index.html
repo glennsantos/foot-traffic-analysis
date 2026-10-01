@@ -163,7 +163,7 @@
                 </div>
                 <div class="loading" id="loading" hidden>
                     <div class="loading-heading"><div class="spinner" aria-hidden="true"></div><div><h2>Exploring your location</h2><span class="muted" id="loading-area"></span></div></div>
-                    <p class="muted">We're requesting mapped places and street data, then preparing your report. Keep this page open.</p>
+                    <p class="muted">We're requesting mapped places and street data, then calculating your score. Keep this page open.</p>
                     <div class="timer"><span id="wait-message">Waiting for the analysis service</span><span id="elapsed">0:00 elapsed</span></div>
                     <div class="tip-card"><p class="eyebrow">While you wait · Site visit checklist</p><h3 id="tip-title"></h3><p id="tip-body"></p></div>
                     <div class="tip-nav"><span id="tip-count"></span><button type="button" class="text-button" id="next-tip">Next prompt →</button></div>
@@ -179,7 +179,7 @@
         const $ = id => document.getElementById(id);
         const map = L.map('map').setView([14.5995, 120.9842], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-        let marker, radiusCircle, selected, busy = false, timer, tipIndex = 0, reportUrl;
+        let marker, radiusCircle, selected, busy = false, timer, tipIndex = 0;
         const tips = [
             ['Walk the actual route', 'On your site visit, walk from the nearest transit stop to the entrance. Note crossings, barriers, and whether the storefront is easy to see.'],
             ['Check different times', 'Plan visits during your intended trading hours. Record pedestrian counts at the same spot and compare weekday and weekend observations.'],
@@ -250,7 +250,7 @@
             },1000);
             if (matchMedia('(max-width: 900px)').matches) $('analysis-panel').scrollIntoView({block:'start'});
             try {
-                const response = await fetch('/analyze', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:site.lat,lon:site.lon,radius})});
+                const response = await fetch('/analyze', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:site.lat,lon:site.lon,radius,location_name:site.name})});
                 let data;
                 try { data = await response.json(); } catch { throw new Error('The analysis service returned an unreadable response. Please try again.'); }
                 if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'The analysis service is unavailable. Please try again.');
@@ -264,16 +264,7 @@
         }
         $('analyze-button').addEventListener('click', analyzeLocation);
         function displayResults(data, site, radius) {
-            if (reportUrl) { URL.revokeObjectURL(reportUrl); reportUrl = null; }
-            let download = '';
-            if (data.pdf_report) {
-                if (data.pdf_report_base64) {
-                    const bytes = Uint8Array.from(atob(data.pdf_report_base64), char => char.charCodeAt(0));
-                    reportUrl = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
-                }
-                const href = reportUrl || `/download-report/${encodeURIComponent(data.pdf_report)}`;
-                download = `<div class="report-row"><div><strong>Your location report</strong><small>Detailed indicators and nearby places</small></div><a class="primary" href="${escapeHtml(href)}" download="${escapeHtml(data.pdf_report)}">Download PDF ↓</a></div>`;
-            }
+            const download = data.report_token ? '<div class="report-row"><div><strong>Your location report</strong><small>Prepared when you download</small></div><button type="button" class="primary" id="download-report">Download PDF ↓</button></div>' : '';
             const score = Number(data.viability_score);
             const scoreCard = data.viability_score != null && Number.isFinite(score) && data.viability_rating ? `<div class="score-card"><p class="eyebrow" style="margin:0 0 14px;color:#a8d8ca">Model viability score</p><div class="score-top"><span class="score-number">${score.toFixed(1)}<span style="font-size:24px">%</span></span><span class="rating">${escapeHtml(data.viability_rating)}</span></div><p>Based on mapped indicators and the app's scoring thresholds. Verify pedestrian traffic and site conditions in person.</p></div>` : '<p class="muted">A viability score is not available for this analysis.</p>';
             const rows = Object.keys(descriptions).filter(key => data[key] !== undefined).map(key => {
@@ -282,8 +273,29 @@
                 const meets = Number(count) >= thresholds[key];
                 return `<article class="indicator"><div class="indicator-top"><div><h3>${formatName(key)}</h3><p>${descriptions[key]}</p><div class="status ${meets ? '' : 'below'}">${meets ? 'Meets threshold' : 'Below threshold'} · Target ${thresholds[key]}</div></div><span class="count">${escapeHtml(count)}</span></div>${places.length ? `<details><summary>View ${places.length} mapped places</summary><ul>${places.map(place => `<li>${escapeHtml(place)}</li>`).join('')}</ul></details>` : ''}</article>`;
             }).join('');
-            $('results').innerHTML = `<div class="location-info"><p class="eyebrow">Site overview</p><h3>${escapeHtml(site.name || data.location_name || 'Selected location')}</h3><p class="metadata">${site.lat.toFixed(4)}, ${site.lon.toFixed(4)} · ${radius} m radius</p></div>${scoreCard}${download}<h3 class="indicator-heading">Local indicators</h3>${rows}<p class="source-note">Counts reflect mapped OpenStreetMap data within the selected area. Missing map entries can affect results.</p>`;
+            $('results').innerHTML = `<div class="location-info"><p class="eyebrow">Site overview</p><h3>${escapeHtml(site.name || data.location_name || 'Selected location')}</h3><p class="metadata">${site.lat.toFixed(4)}, ${site.lon.toFixed(4)} · ${radius} m radius${data.cache?.hit ? ' · Cached analysis' : ''}</p></div>${scoreCard}${download}<h3 class="indicator-heading">Local indicators</h3>${rows}<p class="source-note">Counts reflect mapped OpenStreetMap data within the selected area. Missing map entries can affect results.</p>`;
             $('results').hidden = false;
+            if (data.report_token) $('download-report').addEventListener('click', async event => {
+                const button = event.currentTarget;
+                button.disabled = true; button.textContent = 'Preparing PDF…';
+                $('error').hidden = true;
+                try {
+                    const response = await fetch('/api/report', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({report_token:data.report_token})});
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'The PDF could not be generated. Try again.');
+                    }
+                    const url = URL.createObjectURL(await response.blob());
+                    const link = document.createElement('a');
+                    link.href = url; link.download = data.pdf_report;
+                    document.body.append(link); link.click(); link.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } catch (error) {
+                    $('error').textContent = error.message; $('error').hidden = false;
+                } finally {
+                    button.disabled = false; button.textContent = 'Download PDF ↓';
+                }
+            });
         }
         let searchTimeout, searchVersion = 0, searchController;
         function closeSearch() { $('search-results').hidden = true; $('search-box').setAttribute('aria-expanded','false'); }

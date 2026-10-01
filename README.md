@@ -19,7 +19,8 @@ Web app for analyzing foot traffic indicators around any point using OpenStreetM
 
 - Interactive map and global search (Leaflet + Nominatim)
 - 12 indicators with weighted scoring and clear viability rating
-- Detailed PDF report with executive summary and places tables
+- PDF report generated on download, with executive summary and places tables
+- Completed-analysis caching shared across local workers, with optional Redis for multiple hosts
 - Resilient Overpass endpoint selection and OSMnx caching
 - JSON persistence, logging, and a health check endpoint
 
@@ -61,7 +62,8 @@ Python environment:
 ## Configuration
 
 - `PORT`: HTTP port (default `1010`)
-- `SECRET_KEY`: Flask secret key (set in production)
+- `SECRET_KEY`: Flask secret key. Set the same strong secret on every worker/instance so signed report downloads work across requests and deployments.
+  - Local workers share an automatically generated key in `cache/report-secret` when unset. Vercel and deployments across hosts require an explicit shared key.
 - `ALLOWED_ORIGINS`: CORS origins, comma-separated (default `*` for dev)
 - `NOMINATIM_EMAIL`: Contact email included in User-Agent for Nominatim requests (recommended)
   - Reverse geocoding includes it in headers; the search box appends it as a query parameter if set.
@@ -71,6 +73,11 @@ Python environment:
 - `GOOGLE_MAPS_API_KEY`: One supported credential for `POST /api/places-insights`. Enable billing and the Places Aggregate API in the Google Cloud project that owns this key. Google's current API reference documents the `cloud-platform` OAuth scope; `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN` can be used instead for OAuth/service-account authentication.
 - `PLACES_INSIGHTS_CACHE_TTL_SECONDS`: In-memory Google-count cache duration, default `900`. This lowers repeated-call latency and billable requests; it is per-process and should not be treated as a distributed cache.
 - `PLACES_INSIGHTS_CACHE_MAX_ENTRIES`: Maximum cached count queries per process, default `512`; oldest entries are evicted when full.
+- `ANALYSIS_CACHE_TTL_SECONDS`: Completed OSM result freshness, default `3600`. Cache entries use exact coordinates, radius, and analysis version. Only successful extraction is cached.
+- `ANALYSIS_CACHE_PATH`: SQLite cache path, default `cache/analyses.sqlite3` locally or `/tmp/cache/analyses.sqlite3` on Vercel. Workers on the same host share it.
+- `ANALYSIS_CACHE_MAX_ENTRIES`: SQLite entry limit, default `512`. For Redis, configure memory limits and eviction on the Redis service.
+- `REDIS_URL`: Optional Redis connection URL for completed results shared across hosts and serverless instances. Cache outages fall back to live analysis. Use `rediss://` for TLS.
+- `REPORT_TOKEN_TTL_SECONDS`: Signed report snapshot lifetime, default `86400`. Expired snapshots require another analysis.
 
 ## Vercel deployment
 
@@ -78,11 +85,13 @@ Production URL: https://retailanalyzer.glennsantos.com
 
 The repository includes `vercel.json` for the Flask function. The map and OpenStreetMap analysis use the existing `/analyze` route; they do not require a Google key. The separate `/api/places-insights` route requires `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN` if you choose to use it.
 
-On Vercel, `/analyze` writes temporary results and cache files to `/tmp`. The report PDF is also returned with the analysis response so the browser can download it without relying on a later request hitting the same function instance. Saved JSON results and the last-search history are not durable across instances.
+On Vercel, `/analyze` writes temporary results and local cache files to `/tmp`. Set `REDIS_URL` for caching across instances. Analysis returns a signed, compressed report snapshot instead of generating a PDF. The browser posts it to `/api/report` when Download PDF is clicked. That endpoint builds the PDF in memory, so downloading does not depend on the original instance or saved JSON file. All instances must have the same `SECRET_KEY`. Saved JSON results and the last-search history are not durable across instances.
 
 The OpenStreetMap analysis depends on public Overpass servers. If those servers are unreachable from Vercel, `/analyze` cannot produce a report. For reliable production analysis, run the Flask worker with an Overpass endpoint that is reachable from its host, or use a dedicated Overpass instance.
 
-This request remains synchronous. An Overpass outage can still fail the analysis, and PDF generation happens after the 180-second OSM budget. Sustained analyses that need more than Vercel's function duration require a durable job queue and persistent result storage.
+An uncached analysis remains synchronous and can still fail during an Overpass outage. PDF generation happens in a separate download request. Sustained analyses that need more than Vercel's function duration require a durable job queue and persistent result storage.
+
+`POST /analyze` accepts optional `location_name` from address search, avoiding a second geocoding request, and `refresh: true` to bypass the completed-result cache. Refresh recomputes the analysis but may reuse OSMnx's existing download cache. Responses include `cache.hit`, `cache.analyzed_at`, and `cache.ttl_seconds`. The UI identifies cached analyses. The legacy `/download-report/<filename>` route still serves previously saved PDFs; new downloads use `/api/report` with `report_token` from the analysis response.
 
 ## Places Insights site-screening API
 

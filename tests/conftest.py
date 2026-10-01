@@ -15,8 +15,18 @@ import networkx as nx
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import app
+from analysis_cache import AnalysisCache
 from foot_traffic_analysis import extract_osm_foot_traffic_indicators
 from pdf_report_generator import LocationViabilityReportGenerator
+
+
+@pytest.fixture(autouse=True)
+def isolated_analysis_storage(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, 'last_searches', {})
+    monkeypatch.setattr(app, 'analysis_cache', AnalysisCache(tmp_path / 'cache.sqlite3'))
+    monkeypatch.setattr(app, 'STORAGE_ROOT', str(tmp_path))
+    (tmp_path / 'analyses_new').mkdir()
+    (tmp_path / 'reports').mkdir()
 
 
 @pytest.fixture

@@ -197,6 +197,9 @@ pytest tests/test_foot_traffic_analysis.py -v
 # Test only PDF generation
 pytest tests/test_pdf_report_generator.py -v
 
+# Test completed-result caching, report snapshots, and cross-process PDF downloads
+pytest tests/test_analysis_speed.py -v
+
 # Test only Flask app
 pytest tests/test_app.py -v
 

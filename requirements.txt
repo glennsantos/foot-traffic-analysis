@@ -7,3 +7,4 @@ requests==2.32.3
 reportlab==4.2.5
 matplotlib==3.10.3 
 gunicorn==22.0.0
+redis==8.1.0

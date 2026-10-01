@@ -7,6 +7,8 @@ import time
 from types import ModuleType, SimpleNamespace
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 osmnx = ModuleType("osmnx")
 osmnx.settings = SimpleNamespace(

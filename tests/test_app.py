@@ -276,7 +276,7 @@ class TestLastSearchRoute:
     def test_get_last_search_found(self, test_client):
         """Test getting last search when one exists"""
         # First, make an analysis request to store a search
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -319,8 +319,7 @@ class TestDownloadReportRoute:
     def test_download_report_success(self, test_client, tmp_path):
         """Test successful report download"""
         # Create a temporary PDF file in reports directory
-        os.makedirs('reports', exist_ok=True)
-        test_file = 'reports/test_report.pdf'
+        test_file = str(tmp_path / 'reports' / 'test_report.pdf')
         with open(test_file, 'w') as f:
             f.write('test pdf content')
 
@@ -359,9 +358,9 @@ class TestAnalyzeRoute:
 
     def test_analyze_success(self, test_client):
         """Test successful analysis"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator') as mock_report_gen:
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report') as mock_report_gen:
 
             # Mock the extraction
             mock_extract.return_value = (
@@ -378,16 +377,6 @@ class TestAnalyzeRoute:
             )
             mock_location.return_value = 'Toronto, Canada'
 
-            # Mock the report generator
-            mock_gen_instance = MagicMock()
-            mock_gen_instance.generate_report.return_value = {
-                'viability_percentage': 85.5,
-                'rating': 'EXCELLENT',
-                'summary': 'Test summary',
-                'scores': []
-            }
-            mock_report_gen.return_value = mock_gen_instance
-
             response = test_client.post('/analyze',
                                       json={'lat': 43.6532, 'lon': -79.3832, 'radius': 300},
                                       content_type='application/json')
@@ -399,9 +388,9 @@ class TestAnalyzeRoute:
 
     def test_analyze_default_radius(self, test_client):
         """Test that default radius is used when not specified"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator'):
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report'):
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
@@ -420,9 +409,9 @@ class TestAnalyzeRoute:
 
     def test_analyze_custom_radius(self, test_client):
         """Test analysis with custom radius"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator'):
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report'):
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
@@ -441,25 +430,15 @@ class TestAnalyzeRoute:
 
     def test_analyze_stores_last_search(self, test_client):
         """Test that analysis stores last search"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator') as mock_report_gen:
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report') as mock_report_gen:
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
                 {'shops': {'count': 10, 'places': [], 'detailed_places': []}}
             )
             mock_location.return_value = 'Test Location'
-
-            # Mock the report generator
-            mock_gen_instance = MagicMock()
-            mock_gen_instance.generate_report.return_value = {
-                'viability_percentage': 85.5,
-                'rating': 'EXCELLENT',
-                'summary': 'Test summary',
-                'scores': []
-            }
-            mock_report_gen.return_value = mock_gen_instance
 
             response = test_client.post('/analyze',
                                       json={'lat': 43.6532, 'lon': -79.3832, 'radius': 300},
@@ -475,9 +454,9 @@ class TestAnalyzeRoute:
 
     def test_analyze_saves_json_file(self, test_client):
         """Test that analysis saves JSON file"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator'):
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report'):
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
@@ -499,9 +478,9 @@ class TestAnalyzeRoute:
 
     def test_analyze_pdf_generation_failure(self, test_client):
         """Test analysis continues when PDF generation fails"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator') as mock_report_gen:
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report') as mock_report_gen:
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
@@ -510,9 +489,7 @@ class TestAnalyzeRoute:
             mock_location.return_value = 'Test Location'
 
             # Make PDF generation fail
-            mock_gen_instance = MagicMock()
-            mock_gen_instance.generate_report.side_effect = Exception("PDF error")
-            mock_report_gen.return_value = mock_gen_instance
+            mock_report_gen.side_effect = Exception("PDF error")
 
             response = test_client.post('/analyze',
                                       json={'lat': 43.6532, 'lon': -79.3832, 'radius': 300},
@@ -521,18 +498,20 @@ class TestAnalyzeRoute:
             # Should still return 200 with analysis data
             assert response.status_code == 200
             data = json.loads(response.data)
-            assert data['pdf_report'] is None
+            assert data['report_token']
+            download = test_client.post('/api/report', json={'report_token': data['report_token']})
+            assert download.status_code == 500
 
     def test_analyze_extraction_failure(self, test_client):
         """Test analysis when extraction fails"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract:
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract:
             mock_extract.side_effect = Exception("Extraction failed")
 
             response = test_client.post('/analyze',
                                       json={'lat': 43.6532, 'lon': -79.3832, 'radius': 300},
                                       content_type='application/json')
 
-            assert response.status_code == 400
+            assert response.status_code == 500
             data = json.loads(response.data)
             assert 'error' in data
 

@@ -28,7 +28,7 @@ class TestEndToEndAnalysis:
 
     def test_complete_analysis_workflow(self, integration_client, tmp_path):
         """Test the complete workflow from request to PDF generation"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             # Set up mocks
@@ -97,7 +97,7 @@ class TestEndToEndAnalysis:
 
     def test_workflow_with_empty_results(self, integration_client):
         """Test workflow when no POIs are found"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             # Return empty results
@@ -136,7 +136,7 @@ class TestAPIEndpointIntegration:
 
     def test_analyze_then_last_search(self, integration_client):
         """Test that analysis is stored and retrievable via last-search"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -163,7 +163,7 @@ class TestAPIEndpointIntegration:
 
     def test_analyze_then_download_report(self, integration_client):
         """Test that generated PDF can be downloaded"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -182,8 +182,9 @@ class TestAPIEndpointIntegration:
 
             # Try to download the report
             if 'pdf_report' in data and data['pdf_report']:
-                download_response = integration_client.get(f"/download-report/{data['pdf_report']}")
-                assert download_response.status_code in [200, 404]  # May not exist in test
+                download_response = integration_client.post('/api/report', json={'report_token': data['report_token']})
+                assert download_response.status_code == 200
+                assert download_response.data.startswith(b'%PDF')
 
                 # Clean up
                 pdf_path = os.path.join('reports', data['pdf_report'])
@@ -237,7 +238,7 @@ class TestDataFlowIntegration:
 
     def test_json_serialization_in_api(self, integration_client):
         """Test that numpy types are properly serialized in API responses"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             # Create data with numpy types
@@ -278,22 +279,22 @@ class TestErrorPropagation:
 
     def test_osm_extraction_error_propagation(self, integration_client):
         """Test that OSM extraction errors are properly handled"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract:
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract:
             mock_extract.side_effect = Exception("OSM API error")
 
             response = integration_client.post('/analyze',
                                              json={'lat': 43.6532, 'lon': -79.3832},
                                              content_type='application/json')
 
-            assert response.status_code == 400
+            assert response.status_code == 500
             data = json.loads(response.data)
             assert 'error' in data
 
     def test_pdf_generation_error_handling(self, integration_client):
         """Test that PDF generation errors don't break the analysis"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location, \
-             patch('app.LocationViabilityReportGenerator') as mock_gen:
+             patch('pdf_report_generator.LocationViabilityReportGenerator.generate_report') as mock_gen:
 
             mock_extract.return_value = (
                 pd.DataFrame([{'shops': 10}]),
@@ -302,9 +303,7 @@ class TestErrorPropagation:
             mock_location.return_value = 'Test'
 
             # Make PDF generation fail
-            mock_gen_instance = MagicMock()
-            mock_gen_instance.generate_report.side_effect = Exception("PDF error")
-            mock_gen.return_value = mock_gen_instance
+            mock_gen.side_effect = Exception("PDF error")
 
             response = integration_client.post('/analyze',
                                              json={'lat': 43.6532, 'lon': -79.3832},
@@ -313,7 +312,9 @@ class TestErrorPropagation:
             # Should still succeed with analysis data
             assert response.status_code == 200
             data = json.loads(response.data)
-            assert data['pdf_report'] is None
+            assert data['report_token']
+            download = integration_client.post('/api/report', json={'report_token': data['report_token']})
+            assert download.status_code == 500
             assert 'shops' in data
 
             # Clean up
@@ -326,7 +327,7 @@ class TestConcurrentRequests:
 
     def test_multiple_sequential_requests(self, integration_client):
         """Test multiple sequential analysis requests"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -363,7 +364,7 @@ class TestDifferentRadii:
 
     def test_multiple_radii(self, integration_client):
         """Test analysis with different radius values"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             def extract_with_radius(lat, lon, radius_m):
@@ -403,7 +404,7 @@ class TestFileGeneration:
 
     def test_json_file_structure(self, integration_client):
         """Test that generated JSON file has correct structure"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -442,7 +443,7 @@ class TestFileGeneration:
 
     def test_pdf_file_generation(self, integration_client):
         """Test that PDF file is actually generated"""
-        with patch('app.extract_osm_foot_traffic_indicators') as mock_extract, \
+        with patch('foot_traffic_analysis.extract_osm_foot_traffic_indicators') as mock_extract, \
              patch('app.get_location_name') as mock_location:
 
             mock_extract.return_value = (
@@ -460,16 +461,7 @@ class TestFileGeneration:
 
             # Check PDF was created
             if 'pdf_report' in data and data['pdf_report']:
-                pdf_path = os.path.join('reports', data['pdf_report'])
-                assert os.path.exists(pdf_path)
-
-                # Verify it's a PDF file (starts with %PDF)
-                with open(pdf_path, 'rb') as f:
-                    header = f.read(4)
-                    assert header == b'%PDF'
-
-                # Clean up
-                os.remove(pdf_path)
-
-            if 'saved_file' in data and os.path.exists(data['saved_file']):
-                os.remove(data['saved_file'])
+                assert not os.path.exists(os.path.join('reports', data['pdf_report']))
+                report = integration_client.post('/api/report', json={'report_token': data['report_token']})
+                assert report.status_code == 200
+                assert report.data.startswith(b'%PDF')

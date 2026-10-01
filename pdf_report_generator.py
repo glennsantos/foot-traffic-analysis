@@ -4,11 +4,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import io
-import base64
 from datetime import datetime
 import os
 from xml.sax.saxutils import escape
@@ -236,6 +231,17 @@ class LocationViabilityReportGenerator:
                          place.get('address') or 'Address not mapped'])
         return self.styled_table(data, [155, 74, 74, self.content_width - 303])
 
+    def summarize(self, analysis_data, location_name, lat, lon, radius):
+        """Calculate the displayed score without constructing a PDF."""
+        scores = self.calculate_indicator_scores(analysis_data)
+        viability_percentage, rating, _ = self.calculate_overall_viability(scores)
+        return {
+            'viability_percentage': viability_percentage,
+            'rating': rating,
+            'summary': self.generate_summary(location_name, lat, lon, radius, viability_percentage, rating, scores),
+            'scores': scores,
+        }
+
     def generate_report(self, analysis_data, location_name, lat, lon, radius, output_path):
         """Generate the complete PDF report"""
         doc = SimpleDocTemplate(
@@ -245,14 +251,16 @@ class LocationViabilityReportGenerator:
         story = []
         
         # Calculate scores and viability
-        scores = self.calculate_indicator_scores(analysis_data)
-        viability_percentage, rating, rating_color = self.calculate_overall_viability(scores)
+        report_data = self.summarize(analysis_data, location_name, lat, lon, radius)
+        scores = report_data['scores']
+        viability_percentage = report_data['viability_percentage']
+        rating = report_data['rating']
         
         # Title
         story.append(Paragraph("Retail location report", self.title_style))
         story.append(Spacer(1, 20))
         
-        summary_text = self.generate_summary(location_name, lat, lon, radius, viability_percentage, rating, scores)
+        summary_text = report_data['summary']
         story.append(Paragraph(escape(str(location_name)), self.heading_style))
         story.append(Paragraph(f"{lat:.4f}, {lon:.4f} &nbsp; | &nbsp; {radius} m radius", self.styles['Normal']))
         story.append(Spacer(1, 18))
@@ -385,12 +393,7 @@ class LocationViabilityReportGenerator:
         # Build PDF
         doc.build(story, onFirstPage=self.draw_page, onLaterPages=self.draw_page)
         
-        return {
-            'viability_percentage': viability_percentage,
-            'rating': rating,
-            'summary': summary_text,
-            'scores': scores
-        }
+        return report_data
     
     def generate_conclusion(self, viability_percentage, rating, scores):
         """Generate conclusion and recommendations"""

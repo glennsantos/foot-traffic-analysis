@@ -8,19 +8,12 @@ import os
 import requests
 import contextvars
 import logging
+from analysis_errors import AnalysisTimeoutError, AnalysisUpstreamError
 
 logger = logging.getLogger(__name__)
 ANALYSIS_TIMEOUT_SECONDS = 180
 _analysis_deadline = contextvars.ContextVar("analysis_deadline", default=None)
 _overpass_attempts = contextvars.ContextVar("overpass_attempts", default=0)
-
-
-class AnalysisTimeoutError(Exception):
-    pass
-
-
-class AnalysisUpstreamError(Exception):
-    pass
 
 
 class OverpassAttemptLimitError(Exception):

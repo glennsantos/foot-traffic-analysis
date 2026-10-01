@@ -11,7 +11,12 @@ import math
 import threading
 import time
 from urllib.parse import quote
-import base64
+import io
+import hashlib
+import tempfile
+from pathlib import Path
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from analysis_cache import AnalysisCache, analysis_key, ANALYSIS_VERSION
 
 STORAGE_ROOT = '/tmp' if os.getenv('VERCEL') else '.'
 if os.getenv('VERCEL'):
@@ -34,8 +39,32 @@ if allowed_origins == "*":
 else:
     CORS(app, resources={r"/*": {"origins": [o.strip() for o in allowed_origins.split(",") if o.strip()]}})
 
-# Secret key from env (fallback random for local dev)
-app.secret_key = os.getenv("SECRET_KEY") or os.urandom(24)
+def load_secret_key():
+    configured = os.getenv('SECRET_KEY')
+    if configured:
+        return configured
+    if os.getenv('VERCEL'):
+        logger.warning('Set a shared SECRET_KEY on Vercel for report downloads across instances')
+        return os.urandom(32)
+    # Publish a complete key atomically so local Gunicorn workers share it.
+    key_path = Path(STORAGE_ROOT) / 'cache' / 'report-secret'
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    if not key_path.exists():
+        with tempfile.NamedTemporaryFile(dir=key_path.parent, delete=False) as saved:
+            saved.write(os.urandom(32))
+            saved.flush()
+            temporary_path = saved.name
+        try:
+            try:
+                os.link(temporary_path, key_path)
+            except FileExistsError:
+                pass
+        finally:
+            os.unlink(temporary_path)
+    return key_path.read_bytes()
+
+
+app.secret_key = load_secret_key()
 
 logger.info("Flask application starting up...")
 
@@ -60,6 +89,14 @@ def _positive_int_env(name, default):
 
 PLACES_INSIGHTS_CACHE_TTL_SECONDS = _positive_int_env("PLACES_INSIGHTS_CACHE_TTL_SECONDS", 900)
 PLACES_INSIGHTS_CACHE_MAX_ENTRIES = _positive_int_env("PLACES_INSIGHTS_CACHE_MAX_ENTRIES", 512)
+ANALYSIS_CACHE_TTL_SECONDS = _positive_int_env("ANALYSIS_CACHE_TTL_SECONDS", 3600)
+REPORT_TOKEN_TTL_SECONDS = _positive_int_env("REPORT_TOKEN_TTL_SECONDS", 86400)
+analysis_cache = AnalysisCache(
+    os.getenv("ANALYSIS_CACHE_PATH", os.path.join(STORAGE_ROOT, 'cache', 'analyses.sqlite3')),
+    ttl=ANALYSIS_CACHE_TTL_SECONDS,
+    max_entries=_positive_int_env("ANALYSIS_CACHE_MAX_ENTRIES", 512),
+    redis_url=os.getenv("REDIS_URL"),
+)
 _places_insights_cache = {}
 _places_insights_cache_lock = threading.Lock()
 
@@ -295,7 +332,7 @@ def get_location_name(lat, lon):
         response = requests.get(
             url,
             headers=nominatim_headers(),
-            timeout=20,
+            timeout=5,
         )
         data = response.json()
         road = data.get('address', {}).get('road', '')
@@ -363,128 +400,143 @@ def download_report(filename):
         logger.error(f"Error downloading report: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+def report_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt='retail-report-v1')
+
+
+@app.route('/api/report', methods=['POST'])
+def create_report():
+    """Build the exact signed analysis snapshot without relying on local files."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('report_token'), str):
+        return jsonify({'error': 'A report token is required.'}), 400
+    if len(data['report_token']) > 2_000_000:
+        return jsonify({'error': 'Report token is too large.'}), 413
+    try:
+        snapshot = report_serializer().loads(data['report_token'], max_age=REPORT_TOKEN_TTL_SECONDS)
+    except SignatureExpired:
+        return jsonify({'error': 'This report has expired. Analyze the location again.'}), 410
+    except BadSignature:
+        return jsonify({'error': 'Invalid report token. Analyze the location again.'}), 400
+    if snapshot.get('analysis_version') != ANALYSIS_VERSION:
+        return jsonify({'error': 'The analysis model has changed. Analyze the location again.'}), 410
+    try:
+        from pdf_report_generator import LocationViabilityReportGenerator
+        output = io.BytesIO()
+        started = time.monotonic()
+        LocationViabilityReportGenerator().generate_report(
+            snapshot['analysis'], snapshot['location_name'], snapshot['latitude'],
+            snapshot['longitude'], snapshot['radius_meters'], output,
+        )
+        logger.info('analysis stage=pdf_generation duration_seconds=%.2f', time.monotonic() - started)
+        output.seek(0)
+        return send_file(output, mimetype='application/pdf', as_attachment=True,
+                         download_name=snapshot['pdf_report'])
+    except Exception:
+        logger.exception('Report generation failed')
+        return jsonify({'error': 'The PDF could not be generated. Try downloading it again.'}), 500
+
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    data = request.get_json(silent=True)
     try:
-        # Keep the analysis imports local so the home page can start quickly.
-        from foot_traffic_analysis import AnalysisTimeoutError, AnalysisUpstreamError, extract_osm_foot_traffic_indicators
-        from pdf_report_generator import LocationViabilityReportGenerator
+        if not isinstance(data, dict):
+            raise ValueError('A JSON object is required.')
+        if isinstance(data.get('lat'), bool) or isinstance(data.get('lon'), bool):
+            raise ValueError('Coordinates must be numbers.')
+        lat, lon = float(data['lat']), float(data['lon'])
+        if not math.isfinite(lat) or not -90 <= lat <= 90 or not math.isfinite(lon) or not -180 <= lon <= 180:
+            raise ValueError('Coordinates are out of range.')
+        raw_radius = data.get('radius', 300)
+        if isinstance(raw_radius, bool) or float(raw_radius) != int(raw_radius):
+            raise ValueError('Radius must be an integer.')
+        radius = int(raw_radius)
+        if not 100 <= radius <= 2000:
+            raise ValueError('Radius must be between 100 and 2000 meters.')
+        location_name = data.get('location_name', '')
+        if not isinstance(location_name, str) or len(location_name) > 500:
+            raise ValueError('Location name must be a string of at most 500 characters.')
+        location_name = location_name.strip()
+        refresh = data.get('refresh', False)
+        if not isinstance(refresh, bool):
+            raise ValueError('Refresh must be a boolean.')
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        return jsonify({'error': str(error)}), 400
+
+    from analysis_errors import AnalysisTimeoutError, AnalysisUpstreamError
+    try:
+        started = time.monotonic()
         client_ip = get_client_ip()
-        logger.info(f"=== ANALYSIS REQUEST START === from {client_ip}")
-        
-        # Parse request data
-        data = request.json
-        logger.info(f"Request data: {data}")
-        
-        lat = float(data['lat'])
-        lon = float(data['lon'])
-        radius = int(data.get('radius', 300))  # Default to 300m if not specified
-        
-        logger.info(f"Parsed coordinates: lat={lat}, lon={lon}, radius={radius}m")
-        
-        # Store the search in session
-        last_searches[client_ip] = {
-            'lat': lat,
-            'lon': lon,
-            'radius': radius,
-            'timestamp': datetime.now().isoformat()
-        }
-        logger.info(f"Stored search in session for {client_ip}")
-        
-        # Get analysis results
-        logger.info("Starting OSM data extraction...")
-        stage_started = time.monotonic()
-        results, analysis = extract_osm_foot_traffic_indicators(lat, lon, radius_m=radius)
-        logger.info("analysis stage=osm_extraction duration_seconds=%.2f", time.monotonic() - stage_started)
-        
-        analysis_data = results.to_dict('records')[0]
-        logger.info(f"Analysis data keys: {list(analysis_data.keys())}")
-        
-        # Get location name for the file
-        stage_started = time.monotonic()
-        location_name = get_location_name(lat, lon)
-        logger.info("analysis stage=reverse_geocoding duration_seconds=%.2f", time.monotonic() - stage_started)
-        safe_location_name = "".join(x for x in location_name if x.isalnum() or x in [' ', '_']).strip()
-        
-        # Create filename with timestamp and location
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"analysis_{timestamp}_{safe_location_name}_{radius}m.json"
-        json_filepath = os.path.join(STORAGE_ROOT, 'analyses_new', filename)
-        
-        # Save analysis to file
-        logger.info(f"Saving analysis to file: {json_filepath}")
-        with open(json_filepath, 'w') as f:
-            json.dump({
-                'timestamp': datetime.now().isoformat(),
-                'location_name': location_name,
-                'latitude': lat,
-                'longitude': lon,
-                'radius_meters': radius,
-                'analysis': analysis
-            }, f, indent=2)
-            
-        logger.info(f"Analysis saved successfully to: {json_filepath}")
-        
-        # Generate PDF Report
-        logger.info("Generating PDF viability report...")
-        try:
-            report_generator = LocationViabilityReportGenerator()
-            pdf_filename = f"viability_report_{timestamp}_{safe_location_name}_{radius}m.pdf"
-            pdf_filepath = os.path.join(STORAGE_ROOT, 'reports', pdf_filename)
-            
-            # Generate the report and get summary data
+        last_searches[client_ip] = {'lat': lat, 'lon': lon, 'radius': radius,
+                                   'timestamp': datetime.now().isoformat()}
+        key = analysis_key(lat, lon, radius)
+        cached_result = None if refresh else analysis_cache.get(key)
+        cached = cached_result is not None
+        if cached:
+            snapshot = cached_result
+        else:
+            from foot_traffic_analysis import extract_osm_foot_traffic_indicators
             stage_started = time.monotonic()
-            report_data = report_generator.generate_report(
-                analysis, location_name, lat, lon, radius, pdf_filepath
-            )
-            logger.info("analysis stage=pdf_generation duration_seconds=%.2f", time.monotonic() - stage_started)
-            
-            logger.info(f"PDF report generated successfully: {pdf_filepath}")
-            
-            # Add report data to response
-            analysis_data.update(analysis)  # Include detailed place information
-            analysis_data['saved_file'] = json_filepath
-            analysis_data['radius_meters'] = radius
-            analysis_data['pdf_report'] = pdf_filename
-            if os.getenv('VERCEL'):
-                with open(pdf_filepath, 'rb') as report_file:
-                    analysis_data['pdf_report_base64'] = base64.b64encode(report_file.read()).decode('ascii')
-            analysis_data['viability_score'] = report_data['viability_percentage']
-            analysis_data['viability_rating'] = report_data['rating']
-            analysis_data['viability_summary'] = report_data['summary']
-            
-        except Exception as e:
-            logger.error(f"Error generating PDF report: {str(e)}")
-            # Continue without PDF if generation fails
-            analysis_data.update(analysis)
-            analysis_data['saved_file'] = json_filepath
-            analysis_data['radius_meters'] = radius
-            analysis_data['pdf_report'] = None
-            analysis_data['viability_score'] = None
-            analysis_data['viability_rating'] = None
-            analysis_data['viability_summary'] = "PDF report generation failed"
-        
-        # Ensure consistent property names with frontend
-        response_data = analysis_data.copy()
-        response_data['lat'] = lat
-        response_data['lon'] = lon
-        response_data = _to_json_safe(response_data)
-        
-        logger.info(f"Returning response with keys: {list(response_data.keys())}")
-        logger.info("=== ANALYSIS REQUEST SUCCESS ===")
-        
-        return jsonify(response_data)
-    except AnalysisTimeoutError as e:
-        logger.warning("Analysis timed out: %s", e)
-        return jsonify({'error': str(e), 'code': 'analysis_timeout'}), 503
-    except AnalysisUpstreamError as e:
-        logger.warning("Analysis upstream failed: %s", e)
-        return jsonify({'error': str(e), 'code': 'analysis_upstream_unavailable'}), 503
-    except Exception as e:
-        error_msg = f"Error during analysis: {str(e)}"
-        logger.error(f"=== ANALYSIS REQUEST FAILED ===")
-        logger.error(f"{error_msg}\n{traceback.format_exc()}")
-        return jsonify({'error': error_msg}), 400
+            _, analysis = extract_osm_foot_traffic_indicators(lat, lon, radius_m=radius)
+            logger.info('analysis stage=osm_extraction duration_seconds=%.2f', time.monotonic() - stage_started)
+            snapshot = {
+                'analysis': _to_json_safe(analysis), 'latitude': lat, 'longitude': lon,
+                'radius_meters': radius, 'location_name': '',
+                'analysis_version': ANALYSIS_VERSION,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+            }
+        # Search labels are presentation input, never stored for other users.
+        cache_changed = not cached
+        if not location_name:
+            if not snapshot['location_name']:
+                stage_started = time.monotonic()
+                snapshot['location_name'] = get_location_name(lat, lon)
+                logger.info('analysis stage=reverse_geocoding duration_seconds=%.2f', time.monotonic() - stage_started)
+                cache_changed = True
+            location_name = snapshot['location_name']
+        if cache_changed:
+            analysis_cache.set(key, snapshot)
+
+        from pdf_report_generator import LocationViabilityReportGenerator
+        snapshot = dict(snapshot, location_name=location_name)
+        report_data = LocationViabilityReportGenerator().summarize(
+            snapshot['analysis'], location_name, lat, lon, radius,
+        )
+        # Content identifiers avoid collisions between simultaneous requests.
+        identifier = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()[:24]
+        snapshot['pdf_report'] = f'viability_report_{identifier}.pdf'
+        filename = f'analysis_{identifier}.json'
+        json_filepath = os.path.join(STORAGE_ROOT, 'analyses_new', filename)
+        if not os.path.exists(json_filepath):
+            with tempfile.NamedTemporaryFile(mode='w', dir=os.path.dirname(json_filepath), delete=False) as saved:
+                temporary_path = saved.name
+                try:
+                    json.dump(snapshot, saved, allow_nan=False)
+                    saved.close()
+                    os.replace(temporary_path, json_filepath)
+                finally:
+                    if os.path.exists(temporary_path):
+                        os.unlink(temporary_path)
+        response_data = dict(snapshot['analysis'])
+        response_data.update({
+            'lat': lat, 'lon': lon, 'radius_meters': radius, 'location_name': location_name,
+            'saved_file': json_filepath, 'pdf_report': snapshot['pdf_report'],
+            'report_token': report_serializer().dumps(snapshot),
+            'viability_score': report_data['viability_percentage'],
+            'viability_rating': report_data['rating'], 'viability_summary': report_data['summary'],
+            'cache': {'hit': cached, 'analyzed_at': snapshot['timestamp'],
+                      'ttl_seconds': ANALYSIS_CACHE_TTL_SECONDS},
+        })
+        logger.info('analysis stage=total duration_seconds=%.2f cache_hit=%s', time.monotonic() - started, cached)
+        return jsonify(_to_json_safe(response_data))
+    except AnalysisTimeoutError as error:
+        return jsonify({'error': str(error), 'code': 'analysis_timeout'}), 503
+    except AnalysisUpstreamError as error:
+        return jsonify({'error': str(error), 'code': 'analysis_upstream_unavailable'}), 503
+    except Exception:
+        logger.exception('Analysis failed')
+        return jsonify({'error': 'The analysis could not be completed. Try again.'}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '1010'))
