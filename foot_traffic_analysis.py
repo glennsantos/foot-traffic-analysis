@@ -1,10 +1,49 @@
 import osmnx as ox
+from osmnx import _overpass
 import pandas as pd
 import json
 import traceback
 import time
 import os
 import requests
+import contextvars
+import logging
+
+logger = logging.getLogger(__name__)
+ANALYSIS_TIMEOUT_SECONDS = 180
+_analysis_deadline = contextvars.ContextVar("analysis_deadline", default=None)
+_overpass_attempts = contextvars.ContextVar("overpass_attempts", default=0)
+
+
+class AnalysisTimeoutError(Exception):
+    pass
+
+
+class AnalysisUpstreamError(Exception):
+    pass
+
+
+def _check_deadline(stage):
+    deadline = _analysis_deadline.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise AnalysisTimeoutError(f"Analysis timed out during {stage}")
+
+
+# OSMnx 1.9.4 recursively retries Overpass 429/504 responses without a limit.
+# Intercept each attempt, including its recursive calls, for this request only.
+_original_overpass_request = _overpass._overpass_request
+
+
+def _bounded_overpass_request(data, pause=None, error_pause=60):
+    _check_deadline("Overpass request")
+    attempt = _overpass_attempts.get() + 1
+    _overpass_attempts.set(attempt)
+    if attempt > 8:
+        raise AnalysisTimeoutError("Overpass exceeded the analysis request limit")
+    return _original_overpass_request(data, pause=pause, error_pause=min(error_pause, 5))
+
+
+_overpass._overpass_request = _bounded_overpass_request
 
 """OSM data extraction and analysis utilities."""
 
@@ -12,25 +51,18 @@ import requests
 try:
     # Prefer new names when available (silence deprecation warnings)
     if hasattr(ox.settings, "requests_timeout"):
-        ox.settings.requests_timeout = 300
+        ox.settings.requests_timeout = 20
     else:
-        ox.settings.timeout = 300  # fallback for older versions
+        ox.settings.timeout = 20  # fallback for older versions
 except Exception:
     pass
 
-ox.settings.max_query_area_size = 50_000  # Increase max query area size
-try:
-    # Prefer new name, fallback for v1
-    if hasattr(ox.settings, "overpass_memory"):
-        ox.settings.overpass_memory = 1024 * 1024 * 1024  # 1GB
-    else:
-        ox.settings.memory = 1024 * 1024 * 1024  # v1
-except Exception:
-    pass
+# Keep OSMnx's default query area. A 50,000 m² limit subdivided even
+# the default 300 m radius into multiple public Overpass requests.
 
 # Use local cache to reduce calls
 ox.settings.use_cache = True
-ox.settings.cache_folder = 'cache'
+ox.settings.cache_folder = '/tmp/osmnx-cache' if os.getenv('VERCEL') else 'cache'
 
 # Avoid calling Overpass status (prevents UnboundLocalError in some environments)
 ox.settings.overpass_rate_limit = False
@@ -43,10 +75,11 @@ def _parse_overpass_endpoints_from_env():
     return endpoints or None
 
 # List of alternative Overpass endpoints (safe defaults)
-# Prefer base form to suit OSMnx v1; v2 gets normalized to full /interpreter
+# OSMnx appends /interpreter to this base URL.
 OVERPASS_ENDPOINTS = _parse_overpass_endpoints_from_env() or [
-    "https://overpass.kumi.systems/api",
+    "https://overpass.private.coffee/api",
     "https://overpass-api.de/api",
+    "https://maps.mail.ru/osm/tools/overpass/api",
 ]
 
 def _status_url_for(endpoint: str) -> str:
@@ -57,12 +90,7 @@ def _status_url_for(endpoint: str) -> str:
     return endpoint.rstrip("/") + "/status"
 
 def _normalize_overpass_urls(endpoint: str):
-    """Return a tuple (v1_base_endpoint, v2_full_interpreter_url).
-
-    - v1 expects base like https://host/api
-    - v2 expects full like https://host/api/interpreter
-    Accept either form as input and normalize.
-    """
+    """Return a base URL and its interpreter URL for either input form."""
     s = (endpoint or "").strip().rstrip("/")
     if not s:
         return s, s
@@ -78,7 +106,7 @@ def test_overpass_endpoint(endpoint: str) -> bool:
     """Test if an Overpass endpoint is accessible via its status URL."""
     try:
         status_url = _status_url_for(endpoint)
-        response = requests.get(status_url, timeout=10)
+        response = requests.get(status_url, timeout=5)
         return 200 <= response.status_code < 400
     except Exception:
         return False
@@ -103,16 +131,18 @@ def get_working_endpoint():
     return OVERPASS_ENDPOINTS[0]
 
 def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
+    deadline_token = _analysis_deadline.set(time.monotonic() + ANALYSIS_TIMEOUT_SECONDS)
+    attempts_token = _overpass_attempts.set(0)
     try:
         print(f"\nStarting analysis for coordinates: {lat}, {lon} with radius {radius_m}m")
         
-        # Find a working endpoint before starting and normalize for v1/v2
+        # Find a working endpoint before starting.
         working_endpoint = get_working_endpoint()
-        v1_base, v2_full = _normalize_overpass_urls(working_endpoint)
-        # Set for both v1 and v2 naming
-        ox.settings.overpass_endpoint = v1_base
+        _check_deadline("endpoint selection")
+        base_url, _ = _normalize_overpass_urls(working_endpoint)
+        ox.settings.overpass_endpoint = base_url
         if hasattr(ox.settings, "overpass_url"):
-            ox.settings.overpass_url = v2_full
+            ox.settings.overpass_url = base_url
         
         location_point = (lat, lon)
 
@@ -133,34 +163,38 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
 
         print("Fetching POIs from OpenStreetMap...")
         
-        # Implement retry logic with exponential backoff
+        # Keep retries within the same analysis deadline.
         pois = None
         for attempt in range(max_retries):
             try:
+                _check_deadline("POI fetch")
+                started = time.monotonic()
                 print(f"Attempt {attempt + 1}/{max_retries} using endpoint: {ox.settings.overpass_endpoint}")
                 pois = ox.features_from_point(location_point, tags=poi_tags, dist=radius_m)
+                logger.info("analysis stage=pois duration_seconds=%.2f endpoint=%s", time.monotonic() - started, ox.settings.overpass_endpoint)
+                _check_deadline("POI fetch")
                 print(f"✓ Successfully fetched {len(pois)} POIs")
                 break  # If successful, exit the retry loop
+            except AnalysisTimeoutError:
+                raise
             except Exception as e:
+                logger.warning("analysis stage=pois attempt=%s duration_seconds=%.2f endpoint=%s error=%s", attempt + 1, time.monotonic() - started, ox.settings.overpass_endpoint, e)
                 print(f"✗ Attempt {attempt + 1} failed: {str(e)}")
                 
                 if attempt == max_retries - 1:  # Last attempt
-                    raise Exception(
-                        "Failed to fetch OSM data after retries. "
-                        "This often indicates network/DNS issues reaching the Overpass API. "
-                        f"Last error: {str(e)}"
-                    )
+                    raise AnalysisUpstreamError(f"Failed to fetch OSM POIs after {max_retries} attempts: {e}") from e
                 
                 # Try next endpoint
                 next_endpoint = OVERPASS_ENDPOINTS[(attempt + 1) % len(OVERPASS_ENDPOINTS)]
-                v1_base, v2_full = _normalize_overpass_urls(next_endpoint)
-                ox.settings.overpass_endpoint = v1_base
+                base_url, _ = _normalize_overpass_urls(next_endpoint)
+                ox.settings.overpass_endpoint = base_url
                 if hasattr(ox.settings, "overpass_url"):
-                    ox.settings.overpass_url = v2_full
+                    ox.settings.overpass_url = base_url
                 
                 wait_time = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
                 print(f"Waiting {wait_time} seconds before retry with endpoint: {next_endpoint}")
-                time.sleep(wait_time)
+                _check_deadline("POI retry")
+                time.sleep(min(wait_time, max(0, _analysis_deadline.get() - time.monotonic())))
 
         if pois is None:
             raise Exception("Failed to fetch POI data from any endpoint")
@@ -324,15 +358,21 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
         G = None
         for attempt in range(max_retries):
             try:
+                _check_deadline("street network fetch")
+                started = time.monotonic()
                 G = ox.graph_from_point(location_point, dist=radius_m, network_type='walk')
+                logger.info("analysis stage=street_network duration_seconds=%.2f endpoint=%s", time.monotonic() - started, ox.settings.overpass_endpoint)
+                _check_deadline("street network fetch")
                 break
+            except AnalysisTimeoutError:
+                raise
             except Exception as e:
+                logger.warning("analysis stage=street_network attempt=%s duration_seconds=%.2f endpoint=%s error=%s", attempt + 1, time.monotonic() - started, ox.settings.overpass_endpoint, e)
                 print(f"Street network attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
-                    print("⚠ Street network analysis failed, using 0 intersections")
-                    intersection_count = 0
-                    break
-                time.sleep(5)
+                    raise AnalysisUpstreamError(f"Failed to fetch OSM street network after {max_retries} attempts: {e}") from e
+                _check_deadline("street network retry")
+                time.sleep(min(5, max(0, _analysis_deadline.get() - time.monotonic())))
         
         if G is not None:
             nodes, edges = ox.graph_to_gdfs(G)
@@ -365,8 +405,13 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
         print("Analysis completed successfully")
         return pd.DataFrame([counts]), analysis
 
+    except (AnalysisTimeoutError, AnalysisUpstreamError):
+        raise
     except Exception as e:
         error_msg = f"Error in extract_osm_foot_traffic_indicators: {str(e)}"
         print(f"FULL ERROR: {error_msg}")
         print(f"TRACEBACK: {traceback.format_exc()}")
         raise Exception(error_msg)
+    finally:
+        _analysis_deadline.reset(deadline_token)
+        _overpass_attempts.reset(attempts_token)

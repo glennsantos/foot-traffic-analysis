@@ -259,7 +259,7 @@ class LocationViabilityReportGenerator:
         viability_percentage, rating, rating_color = self.calculate_overall_viability(scores)
         
         # Title
-        story.append(Paragraph("FOOT TRAFFIC VIABILITY ANALYSIS", self.title_style))
+        story.append(Paragraph("RETAIL LOCATION VIABILITY ANALYZER", self.title_style))
         story.append(Spacer(1, 20))
         
         # Summary section

@@ -272,10 +272,10 @@ class TestOSMDataExtraction:
                     max_retries=3
                 )
 
-            assert "Failed to fetch OSM data after retries" in str(exc_info.value)
+            assert "Failed to fetch OSM POIs after 3 attempts" in str(exc_info.value)
 
-    def test_extract_street_network_failure_graceful(self, test_coordinates):
-        """Test graceful handling when street network extraction fails"""
+    def test_extract_street_network_failure_is_reported(self, test_coordinates):
+        """A missing street network must not be reported as zero intersections."""
         with patch('foot_traffic_analysis.get_working_endpoint') as mock_endpoint, \
              patch('foot_traffic_analysis.ox.features_from_point') as mock_features, \
              patch('foot_traffic_analysis.ox.graph_from_point') as mock_graph, \
@@ -285,16 +285,13 @@ class TestOSMDataExtraction:
             mock_features.return_value = gpd.GeoDataFrame()
             mock_graph.side_effect = Exception("Graph extraction failed")
 
-            df, analysis = extract_osm_foot_traffic_indicators(
-                test_coordinates['latitude'],
-                test_coordinates['longitude'],
-                test_coordinates['radius'],
-                max_retries=3
-            )
-
-            # Should still return results with 0 intersections
-            assert df is not None
-            assert analysis['intersection_count'] == 0
+            with pytest.raises(Exception, match="Failed to fetch OSM street network after 3 attempts"):
+                extract_osm_foot_traffic_indicators(
+                    test_coordinates['latitude'],
+                    test_coordinates['longitude'],
+                    test_coordinates['radius'],
+                    max_retries=3
+                )
 
     @pytest.mark.skip(reason="Integration test - requires full OSMnx mocking")
     def test_extract_with_custom_radius(self, mock_osmnx_graph_from_point,

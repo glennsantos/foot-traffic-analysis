@@ -1,0 +1,12 @@
+.env
+.venv
+venv
+cache
+reports
+analyses_new
+dist
+tests
+__pycache__
+.matplotlib_cache
+app.log
+*.pyc

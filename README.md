@@ -1,4 +1,4 @@
-# Foot Traffic Analysis Tool
+# Retail Location Viability Analyzer
 
 Web app for analyzing foot traffic indicators around any point using OpenStreetMap (OSM) data, with automatic PDF viability reports.
 
@@ -65,11 +65,24 @@ Python environment:
 - `ALLOWED_ORIGINS`: CORS origins, comma-separated (default `*` for dev)
 - `NOMINATIM_EMAIL`: Contact email included in User-Agent for Nominatim requests (recommended)
   - Reverse geocoding includes it in headers; the search box appends it as a query parameter if set.
-- `OVERPASS_URL`: Force a specific Overpass endpoint. Accepts either base (`https://.../api`) or full (`https://.../api/interpreter`) — the app normalizes per OSMnx version.
-- `OVERPASS_ENDPOINTS`: Comma-separated list of endpoints to try (left-to-right). Accepts base or full forms; defaults are `https://overpass.kumi.systems/api,https://overpass-api.de/api`.
+- `OVERPASS_URL`: Force a reachable Overpass endpoint. Accepts either base (`https://.../api`) or full (`https://.../api/interpreter`); the app normalizes it for OSMnx 1.9.4.
+- `OVERPASS_ENDPOINTS`: Comma-separated list of endpoints to try (left-to-right). Accepts base or full forms; defaults are `https://overpass.private.coffee/api,https://overpass-api.de/api,https://maps.mail.ru/osm/tools/overpass/api`.
+- The analyzer uses a 180-second deadline for Overpass work and returns `503` with `code: "analysis_timeout"` when it is reached. Failed POI or street network fetches return `503` with `code: "analysis_upstream_unavailable"`. Vercel function logs record elapsed time for POI, street network, geocoding, and PDF stages.
 - `GOOGLE_MAPS_API_KEY`: One supported credential for `POST /api/places-insights`. Enable billing and the Places Aggregate API in the Google Cloud project that owns this key. Google's current API reference documents the `cloud-platform` OAuth scope; `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN` can be used instead for OAuth/service-account authentication.
 - `PLACES_INSIGHTS_CACHE_TTL_SECONDS`: In-memory Google-count cache duration, default `900`. This lowers repeated-call latency and billable requests; it is per-process and should not be treated as a distributed cache.
 - `PLACES_INSIGHTS_CACHE_MAX_ENTRIES`: Maximum cached count queries per process, default `512`; oldest entries are evicted when full.
+
+## Vercel deployment
+
+Production URL: https://retailanalyzer.glennsantos.com
+
+The repository includes `vercel.json` for the Flask function. The map and OpenStreetMap analysis use the existing `/analyze` route; they do not require a Google key. The separate `/api/places-insights` route requires `GOOGLE_MAPS_API_KEY` or `GOOGLE_PLACES_INSIGHTS_ACCESS_TOKEN` if you choose to use it.
+
+On Vercel, `/analyze` writes temporary results and cache files to `/tmp`. The report PDF is also returned with the analysis response so the browser can download it without relying on a later request hitting the same function instance. Saved JSON results and the last-search history are not durable across instances.
+
+The OpenStreetMap analysis depends on public Overpass servers. If those servers are unreachable from Vercel, `/analyze` cannot produce a report. For reliable production analysis, run the Flask worker with an Overpass endpoint that is reachable from its host, or use a dedicated Overpass instance.
+
+This request remains synchronous. An Overpass outage can still fail the analysis, and PDF generation happens after the 180-second OSM budget. Sustained analyses that need more than Vercel's function duration require a durable job queue and persistent result storage.
 
 ## Places Insights site-screening API
 

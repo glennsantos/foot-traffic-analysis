@@ -11,15 +11,17 @@ import math
 import threading
 import time
 from urllib.parse import quote
+import base64
+
+STORAGE_ROOT = '/tmp' if os.getenv('VERCEL') else '.'
+if os.getenv('VERCEL'):
+    os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib')
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # Console output
-        logging.FileHandler('app.log')  # File output
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -266,8 +268,9 @@ def _to_json_safe(obj):
 
 # Create directories if they don't exist
 for directory in ['analyses_new', 'reports']:
-    if not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)
+    path = os.path.join(STORAGE_ROOT, directory)
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
         logger.info(f"Created {directory} directory")
 
 # Global error handler to ensure JSON responses for API consumers
@@ -349,7 +352,7 @@ def download_report(filename):
         # Prevent directory traversal
         if os.path.basename(filename) != filename:
             return jsonify({'error': 'Invalid filename'}), 400
-        report_path = os.path.join('reports', filename)
+        report_path = os.path.join(STORAGE_ROOT, 'reports', filename)
         if os.path.exists(report_path):
             logger.info(f"Serving report download: {filename}")
             return send_file(report_path, as_attachment=True, download_name=filename)
@@ -363,10 +366,8 @@ def download_report(filename):
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        # Kept only for the legacy endpoint.  Keeping this import local lets
-        # the Google Places Insights product start without the retired OSM
-        # analysis stack installed.
-        from foot_traffic_analysis import extract_osm_foot_traffic_indicators
+        # Keep the analysis imports local so the home page can start quickly.
+        from foot_traffic_analysis import AnalysisTimeoutError, AnalysisUpstreamError, extract_osm_foot_traffic_indicators
         from pdf_report_generator import LocationViabilityReportGenerator
         client_ip = get_client_ip()
         logger.info(f"=== ANALYSIS REQUEST START === from {client_ip}")
@@ -392,20 +393,23 @@ def analyze():
         
         # Get analysis results
         logger.info("Starting OSM data extraction...")
+        stage_started = time.monotonic()
         results, analysis = extract_osm_foot_traffic_indicators(lat, lon, radius_m=radius)
-        logger.info("OSM data extraction completed")
+        logger.info("analysis stage=osm_extraction duration_seconds=%.2f", time.monotonic() - stage_started)
         
         analysis_data = results.to_dict('records')[0]
         logger.info(f"Analysis data keys: {list(analysis_data.keys())}")
         
         # Get location name for the file
+        stage_started = time.monotonic()
         location_name = get_location_name(lat, lon)
+        logger.info("analysis stage=reverse_geocoding duration_seconds=%.2f", time.monotonic() - stage_started)
         safe_location_name = "".join(x for x in location_name if x.isalnum() or x in [' ', '_']).strip()
         
         # Create filename with timestamp and location
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"analysis_{timestamp}_{safe_location_name}_{radius}m.json"
-        json_filepath = f"analyses_new/{filename}"
+        json_filepath = os.path.join(STORAGE_ROOT, 'analyses_new', filename)
         
         # Save analysis to file
         logger.info(f"Saving analysis to file: {json_filepath}")
@@ -426,12 +430,14 @@ def analyze():
         try:
             report_generator = LocationViabilityReportGenerator()
             pdf_filename = f"viability_report_{timestamp}_{safe_location_name}_{radius}m.pdf"
-            pdf_filepath = f"reports/{pdf_filename}"
+            pdf_filepath = os.path.join(STORAGE_ROOT, 'reports', pdf_filename)
             
             # Generate the report and get summary data
+            stage_started = time.monotonic()
             report_data = report_generator.generate_report(
                 analysis, location_name, lat, lon, radius, pdf_filepath
             )
+            logger.info("analysis stage=pdf_generation duration_seconds=%.2f", time.monotonic() - stage_started)
             
             logger.info(f"PDF report generated successfully: {pdf_filepath}")
             
@@ -440,6 +446,9 @@ def analyze():
             analysis_data['saved_file'] = json_filepath
             analysis_data['radius_meters'] = radius
             analysis_data['pdf_report'] = pdf_filename
+            if os.getenv('VERCEL'):
+                with open(pdf_filepath, 'rb') as report_file:
+                    analysis_data['pdf_report_base64'] = base64.b64encode(report_file.read()).decode('ascii')
             analysis_data['viability_score'] = report_data['viability_percentage']
             analysis_data['viability_rating'] = report_data['rating']
             analysis_data['viability_summary'] = report_data['summary']
@@ -465,6 +474,12 @@ def analyze():
         logger.info("=== ANALYSIS REQUEST SUCCESS ===")
         
         return jsonify(response_data)
+    except AnalysisTimeoutError as e:
+        logger.warning("Analysis timed out: %s", e)
+        return jsonify({'error': str(e), 'code': 'analysis_timeout'}), 503
+    except AnalysisUpstreamError as e:
+        logger.warning("Analysis upstream failed: %s", e)
+        return jsonify({'error': str(e), 'code': 'analysis_upstream_unavailable'}), 503
     except Exception as e:
         error_msg = f"Error during analysis: {str(e)}"
         logger.error(f"=== ANALYSIS REQUEST FAILED ===")
