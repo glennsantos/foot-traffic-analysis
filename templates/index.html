@@ -95,6 +95,32 @@
         footer { max-width:1488px; margin:auto; padding:12px 24px 24px; display:flex; justify-content:space-between; gap:16px; color:var(--muted); font-size:11px; }
         footer a { color:inherit; }
         [hidden] { display:none !important; }
+        #search-country { color:var(--muted); font-weight:400; }
+        @media (min-width:901px) and (min-height:650px) {
+            body { height:100dvh; display:flex; flex-direction:column; }
+            .topbar { padding:10px 24px; flex:none; }
+            main { width:100%; padding:18px 24px 10px; flex:1; min-height:0; display:flex; flex-direction:column; }
+            h1 { font-size:28px; margin-bottom:6px; }
+            .eyebrow { margin-bottom:4px; }
+            .intro { max-width:none; font-size:13px; margin-bottom:16px; }
+            .workspace { flex:1; min-height:0; align-items:stretch; gap:18px; }
+            .panel { display:flex; flex-direction:column; min-height:0; border-radius:12px; }
+            .panel-heading { padding:12px 18px; flex:none; }
+            h2 { font-size:18px; }
+            .controls { padding:12px 18px; flex:none; }
+            label { margin-bottom:4px; }
+            .search-container { margin-bottom:10px; }
+            input { padding:8px 10px; min-height:40px; }
+            .primary { padding:9px 16px; min-height:40px; }
+            .selection { margin-top:8px; }
+            #map { height:auto; flex:1; min-height:180px; }
+            .map-caption { padding:8px 18px; flex:none; font-size:11px; }
+            .empty { flex:1; min-height:0; padding:20px 24px; }
+            .empty-symbol { width:56px; height:56px; margin-bottom:16px; flex:none; }
+            .empty .mini-guide { margin-top:12px; padding-top:12px; gap:8px; }
+            .results,.loading { min-height:0; overflow-y:auto; padding:18px; }
+            footer { width:100%; padding:6px 24px 10px; flex:none; }
+        }
         @media (max-width:900px) { .workspace { grid-template-columns:1fr; } #map { height:390px; } .empty { min-height:310px; padding:32px 24px; } .topbar small { display:none; } }
         @media (max-width:480px) { main { padding:24px 14px 14px; } .topbar { padding:16px; } .brand { font-size:13px; } .controls,.results,.panel-heading { padding:18px; } .control-row { gap:10px; } .primary { padding:12px 14px; } .panel-heading small { display:none; } .report-row { align-items:flex-start; flex-direction:column; } footer { flex-direction:column; gap:4px; } }
         @media (prefers-reduced-motion:reduce) { .spinner { animation:none; } }
@@ -114,7 +140,7 @@
                 <div class="panel-heading"><h2 id="map-heading"><span class="step">01</span>Choose a location</h2><small>Search or drop a pin</small></div>
                 <div class="controls">
                     <div class="search-container">
-                        <label for="search-box">Address or place</label>
+                        <label for="search-box">Address or place <span id="search-country" role="status">· Philippines</span></label>
                         <input type="search" id="search-box" placeholder="Search a street, neighborhood, or city" autocomplete="off" aria-controls="search-results" aria-expanded="false">
                         <div id="search-results" class="search-results" hidden></div>
                     </div>
@@ -261,16 +287,61 @@
         }
         let searchTimeout, searchVersion = 0, searchController;
         function closeSearch() { $('search-results').hidden = true; $('search-box').setAttribute('aria-expanded','false'); }
+        let mapCountry = 'ph', countryTimeout, countryController, countryVersion = 0;
+        function invalidateSearch() {
+            clearTimeout(searchTimeout);
+            if (searchController) searchController.abort();
+            ++searchVersion;
+            closeSearch();
+        }
+        map.on('movestart', () => {
+            invalidateSearch();
+            clearTimeout(countryTimeout);
+            if (countryController) countryController.abort();
+            ++countryVersion;
+            mapCountry = null;
+            $('search-country').textContent = '· Finding map country…';
+        });
+        map.on('moveend', () => {
+            const version = countryVersion;
+            countryTimeout = setTimeout(async () => {
+                countryController = new AbortController();
+                const center = map.getCenter();
+                const params = new URLSearchParams({format:'jsonv2',lat:center.lat,lon:center.lng,zoom:'3',addressdetails:'1'});
+                if (NOMINATIM_EMAIL) params.set('email',NOMINATIM_EMAIL);
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {signal:countryController.signal});
+                    if (!response.ok) throw new Error('Country lookup unavailable');
+                    const result = await response.json();
+                    if (version !== countryVersion) return;
+                    const code = result.address?.country_code;
+                    if (!code || !/^[a-z]{2}$/i.test(code)) throw new Error('No country at map center');
+                    mapCountry = code.toLowerCase();
+                    $('search-country').textContent = `· ${result.address.country || mapCountry.toUpperCase()}`;
+                    if (!busy && document.activeElement === $('search-box')) $('search-box').dispatchEvent(new Event('input'));
+                } catch (error) {
+                    if (error.name === 'AbortError' || version !== countryVersion) return;
+                    $('search-country').textContent = '· Country unavailable. Move the map to land to retry.';
+                }
+            },600);
+        });
         $('search-box').addEventListener('input', () => {
             clearTimeout(searchTimeout);
             if (searchController) searchController.abort();
             const version = ++searchVersion, query = $('search-box').value.trim();
             closeSearch();
             if (query.length < 3) return;
+            if (!mapCountry) {
+                $('search-results').textContent = 'Search needs the map country. Wait for the lookup or move the map to land.';
+                $('search-results').hidden = false;
+                $('search-box').setAttribute('aria-expanded','true');
+                return;
+            }
+            const country = mapCountry;
             searchTimeout = setTimeout(async () => {
                 searchController = new AbortController();
                 try {
-                    const params = new URLSearchParams({format:'json',q:query,limit:'5'});
+                    const params = new URLSearchParams({format:'json',q:query,limit:'5',countrycodes:country});
                     if (NOMINATIM_EMAIL) params.set('email',NOMINATIM_EMAIL);
                     const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {signal:searchController.signal});
                     if (!response.ok) throw new Error('Search unavailable');
