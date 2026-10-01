@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import time
 from types import ModuleType, SimpleNamespace
+import pandas as pd
 
 
 osmnx = ModuleType("osmnx")
@@ -41,11 +42,27 @@ try:
     try:
         analysis._bounded_overpass_request({"query": "retry"})
         raise AssertionError("Recursive Overpass retries did not stop")
-    except analysis.AnalysisTimeoutError as error:
-        assert str(error) == "Overpass exceeded the analysis request limit"
-        assert analysis._overpass_attempts.get() == 9
+    except analysis.OverpassAttemptLimitError as error:
+        assert str(error) == "Overpass exceeded the request attempt limit"
+        assert analysis._overpass_attempts.get() == 3
 finally:
     analysis._overpass_attempts.reset(attempts_token)
+
+osmnx.features_from_point = lambda *args, **kwargs: pd.DataFrame()
+osmnx.graph_from_point = lambda *args, **kwargs: (
+    object()
+    if osmnx.settings.overpass_endpoint == "https://overpass-api.de/api"
+    else (_ for _ in ()).throw(ConnectionError("graph source unavailable"))
+)
+osmnx.graph_to_gdfs = lambda graph: (pd.DataFrame({"street_count": [1, 3]}), pd.DataFrame())
+original_sleep = analysis.time.sleep
+analysis.time.sleep = lambda seconds: None
+try:
+    _, result = analysis.extract_osm_foot_traffic_indicators(14.6123, 120.9775, 300, max_retries=2)
+    assert result["intersection_count"] == 1
+    assert osmnx.settings.overpass_endpoint == "https://overpass-api.de/api"
+finally:
+    analysis.time.sleep = original_sleep
 
 sys.modules["foot_traffic_analysis"] = analysis
 pdf = ModuleType("pdf_report_generator")

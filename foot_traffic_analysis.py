@@ -23,6 +23,10 @@ class AnalysisUpstreamError(Exception):
     pass
 
 
+class OverpassAttemptLimitError(Exception):
+    pass
+
+
 def _check_deadline(stage):
     deadline = _analysis_deadline.get()
     if deadline is not None and time.monotonic() >= deadline:
@@ -38,8 +42,8 @@ def _bounded_overpass_request(data, pause=None, error_pause=60):
     _check_deadline("Overpass request")
     attempt = _overpass_attempts.get() + 1
     _overpass_attempts.set(attempt)
-    if attempt > 8:
-        raise AnalysisTimeoutError("Overpass exceeded the analysis request limit")
+    if attempt > 2:
+        raise OverpassAttemptLimitError("Overpass exceeded the request attempt limit")
     return _original_overpass_request(data, pause=pause, error_pause=min(error_pause, 5))
 
 
@@ -112,22 +116,11 @@ def test_overpass_endpoint(endpoint: str) -> bool:
         return False
 
 def get_working_endpoint():
-    """Find a working Overpass endpoint (env override respected)."""
+    """Select the first endpoint; the actual query determines availability."""
     env_url = os.getenv("OVERPASS_URL", "").strip()
     if env_url:
         print(f"Using OVERPASS_URL from environment: {env_url}")
         return env_url
-
-    for endpoint in OVERPASS_ENDPOINTS:
-        print(f"Testing endpoint: {endpoint}")
-        if test_overpass_endpoint(endpoint):
-            print(f"✓ Endpoint working: {endpoint}")
-            return endpoint
-        else:
-            print(f"✗ Endpoint failed: {endpoint}")
-
-    # If no endpoint appears responsive, use the first and let OSMnx try
-    print("⚠ No endpoints responding, using default candidate")
     return OVERPASS_ENDPOINTS[0]
 
 def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
@@ -169,6 +162,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
             try:
                 _check_deadline("POI fetch")
                 started = time.monotonic()
+                _overpass_attempts.set(0)
                 print(f"Attempt {attempt + 1}/{max_retries} using endpoint: {ox.settings.overpass_endpoint}")
                 pois = ox.features_from_point(location_point, tags=poi_tags, dist=radius_m)
                 logger.info("analysis stage=pois duration_seconds=%.2f endpoint=%s", time.monotonic() - started, ox.settings.overpass_endpoint)
@@ -360,6 +354,7 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
             try:
                 _check_deadline("street network fetch")
                 started = time.monotonic()
+                _overpass_attempts.set(0)
                 G = ox.graph_from_point(location_point, dist=radius_m, network_type='walk')
                 logger.info("analysis stage=street_network duration_seconds=%.2f endpoint=%s", time.monotonic() - started, ox.settings.overpass_endpoint)
                 _check_deadline("street network fetch")
@@ -371,6 +366,13 @@ def extract_osm_foot_traffic_indicators(lat, lon, radius_m=300, max_retries=3):
                 print(f"Street network attempt {attempt + 1} failed: {str(e)}")
                 if attempt == max_retries - 1:
                     raise AnalysisUpstreamError(f"Failed to fetch OSM street network after {max_retries} attempts: {e}") from e
+                current_endpoint = ox.settings.overpass_endpoint
+                candidates = [_normalize_overpass_urls(endpoint)[0] for endpoint in OVERPASS_ENDPOINTS]
+                next_index = (candidates.index(current_endpoint) + 1) % len(candidates) if current_endpoint in candidates else 0
+                next_endpoint = OVERPASS_ENDPOINTS[next_index]
+                base_url, _ = _normalize_overpass_urls(next_endpoint)
+                ox.settings.overpass_endpoint = base_url
+                ox.settings.overpass_url = base_url
                 _check_deadline("street network retry")
                 time.sleep(min(5, max(0, _analysis_deadline.get() - time.monotonic())))
         

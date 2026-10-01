@@ -157,20 +157,20 @@ class TestWorkingEndpoint:
             assert result == 'https://custom-endpoint.com/api'
 
     def test_first_endpoint_works(self):
-        """Test when first endpoint is working"""
+        """The first candidate is selected for the real POI request."""
         with patch('foot_traffic_analysis.test_overpass_endpoint') as mock_test:
             mock_test.return_value = True
             with patch.dict(os.environ, {}, clear=True):
                 result = get_working_endpoint()
-                assert result in ['https://overpass.kumi.systems/api', 'https://overpass-api.de/api']
+                assert result == 'https://overpass.private.coffee/api'
 
     def test_second_endpoint_works(self):
-        """Test when first fails but second works"""
+        """Status probes do not select endpoints; failed requests trigger rotation."""
         with patch('foot_traffic_analysis.test_overpass_endpoint') as mock_test:
             mock_test.side_effect = [False, True]
             with patch.dict(os.environ, {}, clear=True):
                 result = get_working_endpoint()
-                assert result in ['https://overpass.kumi.systems/api', 'https://overpass-api.de/api']
+                assert result == 'https://overpass.private.coffee/api'
 
     def test_all_endpoints_fail(self):
         """Test when all endpoints fail (should return first as fallback)"""
